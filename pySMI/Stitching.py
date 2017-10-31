@@ -271,7 +271,7 @@ def get_qmap_range( calibration, phi_min, phi_max ):
 
 def get_phi(filename, phi_offset= 0, phi_start= 4.5, phi_spacing= 4.0, polarity=-1,ext='_WAXS.tif'):
     
-    pattern_re='^.+\/?([a-zA-Z0-9_]+_)(\d\d\d)(\%s)$'%ext
+    pattern_re='^.+\/?([a-zA-Z0-9_]+_)(\d\d\d\d\d\d)(\%s)$'%ext
     #print( pattern_re )
     #pattern_re='^.+\/?([a-zA-Z0-9_]+_)(\d\d\d)(\.tif)$'
     phi_re = re.compile(pattern_re)
