@@ -2,9 +2,8 @@ import sys, os, re, PIL
 import numpy as np   
 from scipy.signal import savgol_filter as sf
 import matplotlib.pyplot as plt
-
 from pySMI.smi_generic_functions import plot1D, show_img
-
+from pySMI.DataGonio import convert_Qmap
 
             
 def get_base_all_filenames( inDir, base_filename_cut_length = -7  ):
@@ -146,9 +145,12 @@ def check_overlap_scaling_factor( scale,scale_smooth, i=1, filename=None,  save=
 
     
 def stitch_WAXS_in_Qspace( dataM, phis, calibration, 
-                          dx= 0, dy = 22, dz = 0, dq=0.015  ):
+                          dx= 0, dy = 22, dz = 0, dq=0.015, mask = None  ):
     
-    """YG Octo 11, 2017 stitch waxs scattering images in qspace
+    """
+    YG Update at Nov 10, 2017, adding mask option, this is very useful for low-photon count case
+    
+    YG Octo 11, 2017 stitch waxs scattering images in qspace
     dataM: the data (with corrected intensity), dict format (todolist, make array also avialable)
     phis: for SMI, the rotation angle around z-aixs
     For SMI
@@ -207,9 +209,14 @@ def stitch_WAXS_in_Qspace( dataM, phis, calibration,
         QX = calibration.qx_map().ravel() #[pixel_list] 
         bins = [num_qz, num_qx]
         rangeq = [ [qz_min,qz_max], [qx_min,qx_max] ]
-        remesh_data, zbins, xbins = np.histogram2d(QZ, QX, bins=bins, range=rangeq, normed=False, weights=D)
+        #Nov 7,2017 using new func to qmap
+        remesh_data, zbins, xbins = convert_Qmap(dM, QZ, QX, bins=bins, range=rangeq, mask=mask)
         # Normalize by the binning
-        num_per_bin, zbins, xbins = np.histogram2d(QZ, QX, bins=bins, range=rangeq, normed=False, weights=None)
+        num_per_bin, zbins, xbins = convert_Qmap(np.ones_like(dM), QZ, QX, bins=bins, range=rangeq, mask=mask)
+        
+        #remesh_data, zbins, xbins = np.histogram2d(QZ, QX, bins=bins, range=rangeq, normed=False, weights=D)
+        # Normalize by the binning
+        #num_per_bin, zbins, xbins = np.histogram2d(QZ, QX, bins=bins, range=rangeq, normed=False, weights=None)        
         Intensity_map += remesh_data
         count_map += num_per_bin           
         #Intensity_mapN[i]     = np.nan_to_num( remesh_data/num_per_bin     )
@@ -289,3 +296,167 @@ def get_phi(filename, phi_offset= 0, phi_start= 4.5, phi_spacing= 4.0, polarity=
         phi_c = 0.0
         
     return phi_c
+
+
+############For CHX beamline
+
+def get_qmap_qxyz_range( calibration, det_theta_g_lim, det_phi_g_lim,   
+                sam_phi_lim, sam_theta_lim, sam_chi_lim, 
+                   offset_x= 0,  offset_y= 0, offset_z= 0
+                  ):
+    '''YG Nov 8, 2017@CHX
+    Get q_range, [ qx_start, qx_end, qz_start, qz_end ] for SMI WAXS qmap 
+            (only rotate around z-axis, so det_theta_g=0.,actually being the y-axis for beamline conventional defination)
+            based on calibration on Sep 22,  offset_x= 0,  offset_y= 22
+    Input:
+        calibration: class, See SciAnalysis.XSAnalysis.DataGonio.CalibrationGonio
+        phi_min: min of phis 
+        phi_max: max of phis
+    Output:
+        qrange: np.array([ qx_start, qx_end, qz_start, qz_end     ])
+    '''
+     
+    i=0
+    calibration.set_angles( det_theta_g= det_theta_g_lim[i], det_phi_g= det_phi_g_lim[i],   
+                sam_phi= sam_phi_lim[i], sam_theta = sam_theta_lim[i], sam_chi= sam_chi_lim[i],
+                     offset_x= offset_x,  offset_y= offset_y, offset_z= offset_z                          
+                          ) 
+    calibration._generate_qxyz_maps()
+    qx_start = np.min(calibration.qx_map_data)
+    qy_start = np.min(calibration.qy_map_data)
+    qz_start = np.min(calibration.qz_map_data)    
+     
+    i= 1 
+    
+    calibration.set_angles( det_theta_g= det_theta_g_lim[i], det_phi_g= det_phi_g_lim[i],   
+                sam_phi= sam_phi_lim[i], sam_theta = sam_theta_lim[i], sam_chi= sam_chi_lim[i],
+                     offset_x= offset_x,  offset_y= offset_y, offset_z= offset_z                          
+                          ) 
+    
+    calibration._generate_qxyz_maps()
+    qx_end = np.min(calibration.qx_map_data)
+    qy_end = np.min(calibration.qy_map_data)
+    qz_end = np.min(calibration.qz_map_data)
+    
+    
+    return  np.array([ qx_start, qx_end]),np.array([ qy_start, qy_end]),np.array([ qz_start, qz_end     ])
+
+
+
+
+def stitch_WAXS_in_Qspace_CHX( data, angle_dict, calibration, vary_angle='phi',
+                          qxlim=None, qylim=None, qzlim=None,
+                 det_theta_g= 0, det_phi_g= 0.,   
+                sam_phi= 0, sam_theta= 0,  sam_chi=0,            
+                          dx= 0, dy = 0, dz = 0, dq=0.0008  ):
+    
+    """YG Octo 11, 2017 stitch waxs scattering images in qspace
+    dataM: the data (with corrected intensity), dict format (todolist, make array also avialable)
+    phis: for SMI, the rotation angle around z-aixs
+    For SMI
+    dx=  0  #in pixel unit
+    dy = 22  #in pixel unit
+    dz = 0
+    calibration: class, for calibration
+    
+    Return: Intensity_map, qxs, qzs     
+        
+    Example:
+    phis = np.array( [get_phi(infile,
+                phi_offset=4.649, phi_start=1.0, phi_spacing=5.0,) for infile in infiles]     )  # For TWD data
+                
+    calibration = CalibrationGonio(wavelength_A=0.619920987) # 20.0 keV
+    #calibration.set_image_size( data.shape[1], data.shape[0] )  
+    calibration.set_image_size(195, height=1475) # Pilatus300kW vertical
+    calibration.set_pixel_size(pixel_size_um=172.0)
+    calibration.set_beam_position(97.0, 1314.0)
+    calibration.set_distance(0.275)    
+    
+    Intensity_map, qxs, qzs = stitch_WAXS_in_Qspace( dataM, phis, calibration)
+    #Get center of the qmap
+    bx,by = np.argmin( np.abs(qxs) ), np.argmin( np.abs(qzs) )
+    print( bx, by )
+    """
+    qx_min, qx_max = qxlim[0], qxlim[1]
+    qy_min, qy_max = qylim[0], qylim[1]
+    qz_min, qz_max = qzlim[0], qzlim[1]
+    
+    qxs = np.arange(qxlim[0], qxlim[1], dq)
+    qys = np.arange(qylim[0], qylim[1], dq)
+    qzs = np.arange(qzlim[0], qzlim[1], dq) 
+
+    QXs, QYs = np.meshgrid(qxs, qys)
+    QZs, QYs = np.meshgrid(qzs, qys)    
+    QZs, QXs = np.meshgrid(qzs, qxs)
+    
+    num_qx=len(qxs)
+    num_qy=len(qys)  
+    num_qz=len(qzs)
+      
+    
+    Intensity_map_XY = np.zeros( (len(qxs), len(qys)) )
+    count_map_XY = np.zeros( (len(qxs), len(qys)) ) 
+    
+    Intensity_map_ZY = np.zeros( (len(qzs), len(qys)) )
+    count_map_ZY = np.zeros( (len(qzs), len(qys)) )    
+    
+    Intensity_map_ZX = np.zeros( (len(qzs), len(qxs)) )
+    count_map_ZX = np.zeros( (len(qzs), len(qxs)) )    
+        
+    N = len(data) 
+    N = len( angle_dict[vary_angle] )
+    print(N)
+    #Intensity_mapN = np.zeros( (8, len(qzs), len(qxs)) )    
+    for i in range( N  ):
+        dM = data[i]
+        D = dM.ravel() 
+        sam_phi = angle_dict[vary_angle][i]
+        print(i, sam_phi )      
+        calibration.set_angles(
+            det_theta_g= det_theta_g, det_phi_g= det_phi_g,   
+                sam_phi= sam_phi, sam_theta = sam_theta, sam_chi= sam_chi, 
+                                      offset_x = dx, offset_y = dy, offset_z= dz)  
+        calibration.clear_maps()
+        calibration._generate_qxyz_maps()
+        
+        QZ = calibration.qz_map_lab_data.ravel() #[pixel_list]
+        QX = calibration.qx_map_lab_data.ravel() #[pixel_list] 
+        QY = calibration.qy_map_lab_data.ravel() #[pixel_list] 
+        
+        bins_xy = [num_qx, num_qy]
+        bins_zy = [num_qz, num_qy]
+        bins_zx = [num_qz, num_qx]
+        
+        rangeq_xy = [ [qx_min,qx_max], [qy_min,qy_max] ]
+        rangeq_zy = [ [qz_min,qz_max], [qy_min,qy_max] ]
+        rangeq_zx = [ [qz_min,qz_max], [qx_min,qx_max] ]
+        print( rangeq_xy, rangeq_zy, rangeq_zx )
+                
+        remesh_dataxy, xbins, ybins = np.histogram2d(QX, QY, bins=bins_xy, range=rangeq_xy, normed=False, weights=D)
+        # Normalize by the binning
+        num_per_binxy, xbins, ybins = np.histogram2d(QX, QY, bins=bins_xy, range=rangeq_xy, normed=False, weights=None)
+        Intensity_map_XY += remesh_dataxy
+        count_map_XY += num_per_binxy   
+                
+        remesh_datazy, zbins, ybins = np.histogram2d(QZ, QY, bins=bins_zy, range=rangeq_zy, normed=False, weights=D)
+        # Normalize by the binning
+        num_per_binzy, zbins, ybins = np.histogram2d(QZ, QY, bins=bins_zy, range=rangeq_zy, normed=False, weights=None)
+        Intensity_map_ZY += remesh_datazy
+        count_map_ZY += num_per_binzy  
+                
+        remesh_datazx, zbins, xbins = np.histogram2d(QZ, QX, bins=bins_zx, range=rangeq_zx, normed=False, weights=D)
+        # Normalize by the binning
+        num_per_binzx, zbins, xbins = np.histogram2d(QZ, QX, bins=bins_zx, range=rangeq_zx, normed=False, weights=None)
+        Intensity_map_ZX += remesh_datazx
+        count_map_ZX += num_per_binzx  
+        
+        
+        
+        #Intensity_mapN[i]     = np.nan_to_num( remesh_data/num_per_bin     )
+    Intensity_map_XY = np.nan_to_num( Intensity_map_XY/count_map_XY )
+    Intensity_map_ZY = np.nan_to_num( Intensity_map_ZY/count_map_ZY )
+    Intensity_map_ZX = np.nan_to_num( Intensity_map_ZX/count_map_ZX )
+    
+    
+    return Intensity_map_XY,Intensity_map_ZY,Intensity_map_ZX, qxs, qys, qzs
+
