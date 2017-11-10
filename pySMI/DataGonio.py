@@ -8,6 +8,131 @@ import matplotlib as mpl
 import PIL # Python Image Library (for opening PNG, etc.) 
 import sys, os
 
+from skbeam.core.accumulators.binned_statistic import BinnedStatistic2D,BinnedStatistic1D
+
+
+
+
+def convert_Qmap( img, qx_map, qy_map=None, bins=None, rangeq=None,  origin=None, mask=None, statistic='mean'):
+    """Y.G. Nov 3@CHX 
+    Convert a scattering image to a qmap by giving qx_map and qy_map
+    Return converted qmap, x-coordinates and y-coordinates
+    """
+    if qy_map is not None:           
+        if rangeq is None:
+            qx_min,qx_max = qx_map.min(), qx_map.max()
+            qy_min,qy_max = qy_map.min(), qy_map.max()
+            rangeq = [ [qx_min,qx_max], [qy_min,qy_max] ] 
+            #rangeq =  [qx_min,qx_max ,  qy_min,qy_max]
+        if bins is None:
+            bins = qx_map.shape
+            
+        b2d = BinnedStatistic2D( qx_map.ravel(), qy_map.ravel(), 
+                                    statistic=statistic, bins=bins, mask=mask.ravel(),
+                                    range=rangeq)
+        remesh_data, xbins, ybins = b2d( img.ravel() ), b2d.bin_centers[0], b2d.bin_centers[1]
+        
+    else:
+        if rangeq is None:
+            qx_min,qx_max = qx_map.min(), qx_map.max()
+            rangeq =   [qx_min,qx_max]       
+        if bins is None:
+            bins = [ qx_map.size ]
+        #print( rangeq, bins )
+        if mask is not None:
+            m = mask.ravel()
+        else:
+            m = None
+        b1d = BinnedStatistic1D(  qx_map.ravel(), bins= bins, mask=m  )
+        
+        remesh_data  = b1d(  img.ravel()  )
+        #print('Here')
+        xbins= b1d.bin_centers     
+        ybins=None
+        
+    return remesh_data, xbins, ybins
+
+
+
+
+
+
+def qphiavg(image, q_map=None, phi_map=None, mask=None, bins= None,
+            origin=None, range=None, statistic='mean'):
+    ''' quick qphi average calculator.
+        ignores bins for now
+    '''
+    # TODO : replace with method that takes qphi maps
+    # TODO : also return q and phi of this...
+    # print("In qphi average stream")
+    shape = image.shape
+    if bins is None:
+        bins=shape
+        #print(bins)
+    if origin is None:
+        origin = (shape[0] - 1) / 2., (shape[1] - 1) / 2.
+
+    from skbeam.core.utils import radial_grid, angle_grid
+
+    if q_map is None:
+        q_map = radial_grid(origin, shape)
+    if phi_map is None:
+        phi_map = angle_grid(origin, shape)
+
+    expected_shape = tuple(shape)
+    if mask is not None:
+        if mask.shape != expected_shape:
+            raise ValueError('"mask" has incorrect shape. '
+                             ' Expected: ' + str(expected_shape) +
+                             ' Received: ' + str(mask.shape))
+        mask = mask.reshape(-1)
+
+    rphibinstat = BinnedStatistic2D(q_map.reshape(-1), phi_map.reshape(-1),
+                                    statistic=statistic, bins=bins, mask=mask,
+                                    range=range)
+
+    sqphi = rphibinstat(image.ravel())
+    qs = rphibinstat.bin_centers[0]
+    phis = rphibinstat.bin_centers[1]
+    return  sqphi,  qs,  phis 
+
+
+
+
+
+def convert_Qmap_old( img, qx_map, qy_map=None, bins=None, rangeq=None):
+    """Y.G. Nov 3@CHX 
+    Convert a scattering image to a qmap by giving qx_map and qy_map
+    Return converted qmap, x-coordinates and y-coordinates
+    """
+    if qy_map is not None:           
+        if rangeq is None:
+            qx_min,qx_max = qx_map.min(), qx_map.max()
+            qy_min,qy_max = qy_map.min(), qy_map.max()
+            rangeq = [ [qx_min,qx_max], [qy_min,qy_max] ]        
+        if bins is None:
+            bins = qx_map.shape
+
+        remesh_data, xbins, ybins = np.histogram2d(qx_map.ravel(), qy_map.ravel(), 
+                        bins=bins, range= rangeq, normed=False, weights= img.ravel() )
+        
+    else:
+        if rangeq is None:
+            qx_min,qx_max = qx_map.min(), qx_map.max()
+            rangeq =   [qx_min,qx_max]       
+        if bins is None:
+            bins = qx_map.size 
+        else:
+            if isinstance( bins, list):
+                bins = bins[0] 
+        print( rangeq, bins )
+        remesh_data, xbins  = np.histogram(qx_map.ravel(), 
+                        bins=bins, range= rangeq, normed=False, weights= img.ravel() )        
+        ybins=None
+    return remesh_data, xbins, ybins
+
+
+
 
 # Mask
 ################################################################################    
@@ -373,16 +498,95 @@ class CalibrationGonio(Calibration):
     # Experimental parameters
     ########################################
     
-    def set_angles(self, det_phi_g=0., det_theta_g=0., offset_x = 0, offset_y =0, offset_z=0):
-        '''YG add offset corrections at Sep 21, 2017
+    def set_angles(self, det_phi_g=0., det_theta_g=0., 
+                   sam_phi=0, sam_chi=0, sam_theta=0,
+                   offset_x = 0, offset_y =0, offset_z=0):
+        '''
+        YG. Add sample rotation angles that convert qmap from lab frame to sample frame
+        All the angles are given in degrees
+        
+        sam_phi, rotate along lab-frame x, CHX phi
+        sam_chi, rotate along lab-frame z, CHX chi
+        sam_theta, rotate along lab-frame y, CHX theta
+        
+        YG add offset corrections at Sep 21, 2017
+        
+        det_phi_g, rotate along y-axis, delta at CHX
+        det_theta_g, away from z-plane, gamma at CHX
+        
         For SMI, because only rotate along y-axis, (det_theta_g=0.), only care about 
         offset_x, offset_z '''
         #print('Set angles here')
+        
+        
         self.det_phi_g = det_phi_g
         self.det_theta_g = det_theta_g
         self.offset_x = offset_x
         self.offset_y = offset_y
         self.offset_z = offset_z
+        self.sam_phi=sam_phi        
+        self.sam_chi= sam_chi
+        self.sam_theta=sam_theta
+        
+    def rotation_matix(self,  sam_phi, sam_theta, sam_chi,  degrees=True):
+        '''        
+        sam_phi, rotate along lab-frame x, CHX phi
+        sam_chi, rotate along lab-frame z, CHX chi
+        sam_theta, rotate along lab-frame y, CHX theta        
+        '''
+        
+        if degrees:
+            sam_phi, sam_chi, sam_theta = np.radians(sam_phi), np.radians(sam_chi), np.radians(sam_theta)            
+        
+        Rx = np.array( [ [1,        0,                0            ],
+                         [0,  np.cos( sam_phi ), np.sin( sam_phi ) ],
+                         [0, -np.sin( sam_phi ), np.cos( sam_phi ) ]
+                       ]
+                     )
+        
+        Rz = np.array( [ [ np.cos( sam_chi ), np.sin( sam_chi ),  0          ],
+                         [-np.sin( sam_chi ), np.cos( sam_chi ),  0           ],
+                         [0,        0,                1 ]
+                       ]
+                     ) 
+         
+        Ry = np.array( [ [np.cos(  sam_theta ), 0,    np.sin( sam_theta ) ],
+                         [0,                   1,       0                ],
+                         [-np.sin( sam_theta ), 0,    np.cos( sam_theta ) ]
+                       ]
+                     )
+        Rxy = np.dot(Rx,Ry)
+        return np.dot(Rxy,Rz)
+    
+    def _generate_qxyz_map_SF_from_Lab(self,qx,qy,qz,
+                                       sam_phi, sam_theta, sam_chi,
+                                       degrees=True):
+        '''
+        Convert qmap from Lab frame to sample frame 
+        '''
+        self.Rot = self.rotation_matix( sam_phi,  sam_theta,  sam_chi, degrees=degrees )        
+        qsx, qsy, qsz = np.dot(self.Rot, [ np.ravel(qx), np.ravel(qy), np.ravel(qz)] )
+        return qsx.reshape( qx.shape), qsy.reshape( qy.shape),qsz.reshape( qz.shape)
+            
+    def _generate_qxyz_maps_samFrame(self, degrees=True):
+        """
+        Get lab frame qmap
+        """
+        self._generate_qxyz_maps()
+        self.qx_map_lab_data,self.qy_map_lab_data,self.qz_map_lab_data=  self._generate_qxyz_map_SF_from_Lab( 
+                          self.qx_map_data,self.qy_map_data,self.qz_map_data, 
+                          self.sam_phi, self.sam_theta, self.sam_chi,
+                           degrees=degrees ) 
+        self.qr_map_lab_data = np.sqrt(np.square(self.qx_map_lab_data) + np.square(self.qy_map_lab_data))
+        
+        self.q_map_lab_data =  np.sqrt(np.square(self.qx_map_lab_data) +
+                                       np.square(self.qy_map_lab_data) +
+                                       np.square(self.qz_map_lab_data)
+                                     )
+
+       
+        
+        
     def get_ratioDw(self):
         
         width_mm = self.width*self.pixel_size_um/1000.
@@ -511,6 +715,13 @@ class CalibrationGonio(Calibration):
         qr_c = np.sqrt(np.square(qx_c) + np.square(qy_c)) 
         q_c = np.sqrt(np.square(qx_c) + np.square(qy_c) + np.square(qz_c))  
         
+        self.qx_map_data = qx_c
+        self.qy_map_data = qy_c
+        self.qz_map_data = qz_c
+        self.q_map_data = q_c
+        self.qr_map_data = qr_c
+        
+        
         
         
         if False:#True:
@@ -536,11 +747,6 @@ class CalibrationGonio(Calibration):
             self.qr_map_data1 = np.sign(self.qx_map_data1)*np.sqrt(np.square(self.qx_map_data1) + np.square(self.qy_map_data1))
 
         
-        self.qx_map_data = qx_c
-        self.qy_map_data = qy_c
-        self.qz_map_data = qz_c
-        self.q_map_data = q_c
-        self.qr_map_data = qr_c
-        
+
         
     
