@@ -26,9 +26,14 @@ def convert_Qmap( img, qx_map, qy_map=None, bins=None, rangeq=None,  origin=None
             #rangeq =  [qx_min,qx_max ,  qy_min,qy_max]
         if bins is None:
             bins = qx_map.shape
+
+        if mask is not None:
+            m = mask.ravel()
+        else:
+            m = None
             
         b2d = BinnedStatistic2D( qx_map.ravel(), qy_map.ravel(), 
-                                    statistic=statistic, bins=bins, mask=mask.ravel(),
+                                    statistic=statistic, bins=bins, mask=m,
                                     range=rangeq)
         remesh_data, xbins, ybins = b2d( img.ravel() ), b2d.bin_centers[0], b2d.bin_centers[1]
         
