@@ -144,7 +144,7 @@ def check_overlap_scaling_factor( scale,scale_smooth, i=1, filename=None,  save=
 
 
     
-def stitch_WAXS_in_Qspace( dataM, phis, calibration, 
+def stitch_WAXS_in_Qspace( dataM, phis, calibration, x='Qr', y='Qz', statistic='sum',
                           dx= 0, dy = 22, dz = 0, dq=0.015, mask = None  ):
     
     """
@@ -179,7 +179,7 @@ def stitch_WAXS_in_Qspace( dataM, phis, calibration,
 
     """
 
-    q_range = get_qmap_range( calibration, phis[0], phis[-1]    )    
+    q_range = get_qmap_range( calibration, phis[0], phis[-1], x=x    )    
     if q_range[0] >0:
         q_range[0]= 0
     if q_range[2]>0:
@@ -206,14 +206,21 @@ def stitch_WAXS_in_Qspace( dataM, phis, calibration,
                                       offset_x = dx, offset_y = dy, offset_z= dz)  
         calibration.clear_maps()
         QZ = calibration.qz_map().ravel() #[pixel_list]
-        QX = calibration.qx_map().ravel() #[pixel_list] 
+        if x=='Qx':
+            QX = calibration.qx_map().ravel() #[pixel_list]
+        elif x=='Qy':
+            QX = calibration.qy_map().ravel() #[pixel_list]
+        else:
+            QX = calibration.qr_map().ravel() #[pixel_list]
         bins = [num_qz, num_qx]
         rangeq = [ [qz_min,qz_max], [qx_min,qx_max] ]
+        #print( dM.shape, mask.shape )
+
         #Nov 7,2017 using new func to qmap
-        remesh_data, zbins, xbins = convert_Qmap(dM, QZ, QX, bins=bins, range=rangeq, mask=mask)
+        remesh_data, zbins, xbins = convert_Qmap(dM, QZ, QX, bins=bins, rangeq=rangeq, mask=mask,statistic=statistic)
         # Normalize by the binning
-        num_per_bin, zbins, xbins = convert_Qmap(np.ones_like(dM), QZ, QX, bins=bins, range=rangeq, mask=mask)
-        
+        num_per_bin, zbins, xbins = convert_Qmap(np.ones_like(dM), QZ, QX, bins=bins, rangeq=rangeq, mask=mask,statistic=statistic)
+        #num_per_bin=1
         #remesh_data, zbins, xbins = np.histogram2d(QZ, QX, bins=bins, range=rangeq, normed=False, weights=D)
         # Normalize by the binning
         #num_per_bin, zbins, xbins = np.histogram2d(QZ, QX, bins=bins, range=rangeq, normed=False, weights=None)        
@@ -252,7 +259,7 @@ def plot_qmap_in_folder( inDir ):
             
 
 
-def get_qmap_range( calibration, phi_min, phi_max ):
+def get_qmap_range( calibration, phi_min, phi_max, x='Qr' ):
     '''YG Sep 27@SMI
     Get q_range, [ qx_start, qx_end, qz_start, qz_end ] for SMI WAXS qmap 
             (only rotate around z-axis, so det_theta_g=0.,actually being the y-axis for beamline conventional defination)
@@ -266,13 +273,25 @@ def get_qmap_range( calibration, phi_min, phi_max ):
     '''
     calibration.set_angles(det_phi_g= phi_max, det_theta_g=0., offset_x= 0,  offset_y= 22 )
     calibration._generate_qxyz_maps()
-    qx_end = np.max(calibration.qx_map_data)
+    if x=='Qx':
+        qx_end = np.max(calibration.qx_map_data)
+    elif x=='Qy':
+        qx_end = np.max(calibration.qy_map_data)
+    else:
+        qx_end = np.max(calibration.qr_map_data)    
+     
     qz_start = np.min(calibration.qz_map_data)
     qz_end = np.max(calibration.qz_map_data)
     
     calibration.set_angles(det_phi_g= phi_min, det_theta_g=0., offset_x= 0,  offset_y= 22 )
     calibration._generate_qxyz_maps()
-    qx_start = np.min(calibration.qx_map_data)    
+    if x=='Qx':
+        qx_start = np.max(calibration.qx_map_data)
+    elif x=='Qy':
+        qx_start = np.max(calibration.qy_map_data)
+    else:
+        qx_start = np.max(calibration.qr_map_data) 
+   
     return  np.array([ qx_start, qx_end, qz_start, qz_end     ]) 
  
 
