@@ -10,6 +10,13 @@ from modest_image import ModestImage, imshow
 import matplotlib.cm as mcm
 import copy, scipy 
     
+
+def save_array_to_tiff( array, filename ):
+    #d = np.array(  PIL.Image.open( fp    ).convert('I') )
+    img = PIL.Image.fromarray(array)
+    #outp = ResDir + inf.split('/')[-1][:-4] + '_s.tif'
+    img.save(  filename )   
+    print( 'The data is save to: %s.'%(filename ))
     
 
 def sgolay2d( z, window_size, order, derivative=None):
