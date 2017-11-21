@@ -65,15 +65,21 @@ def check_stitch_two_imgs( img1, img2, overlap_width, badpixel_width =10 ):
 
 
 
-def Correct_Overlap_Images_Intensities( infiles, window_length=101, polyorder=5, 
+def Correct_Overlap_Images_Intensities( infiles,Data=None, window_length=101, polyorder=5, 
                                        overlap_width=58, badpixel_width =10  ):    
-    """YG Correct WAXS Images intensities by using overlap area intensity
+    """YG DEV Nov 19,2017 add data option
+    YG Correct WAXS Images intensities by using overlap area intensity
     Image intensity keep same for the first image
     Other image intensity is scaled by a pixel-width intensity array, which is averaged in the overlap area and then smoothed by 
     scipy.signal import savgol_filter with parameters as  window_length=101, polyorder=5, 
     
     from scipy.signal import savgol_filter as sf
     
+
+    Input:
+    infiles: list, full data filename, in format of tif
+    Data: 3D array, data[i] is a frame
+
     Return: data: array, stitched image with corrected intensity
            dataM: dict, each value is the image with correted intensity
            scale: scale for each image, the first scale=1 by defination
@@ -102,11 +108,17 @@ def Correct_Overlap_Images_Intensities( infiles, window_length=101, polyorder=5,
 
     w  = overlap_width
     ow =  badpixel_width 
-    Nf = len(infiles) 
+    if Data is None:
+        Nf = len(infiles) 
+    else:
+        Nf = len(Data)
     dataM = {}
 
-    for i in range(len(infiles)):
-        d = np.array(  PIL.Image.open(infiles[i]).convert('I') ).T/1.0
+    for i in range( Nf ):
+        if Data is None:
+            d = np.array(  PIL.Image.open(infiles[i]).convert('I') ).T/1.0
+        else:
+            d = Data[i].T
         if i ==0:        
             M,N = d.shape[0], d.shape[1]
             data = np.zeros( [ M, N*Nf - w*( Nf -1) ]  )        
