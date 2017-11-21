@@ -9,7 +9,7 @@ from skimage.draw import line_aa, line, polygon, ellipse, circle
 from modest_image import ModestImage, imshow
 import matplotlib.cm as mcm
 import copy, scipy 
-    
+import PIL    
 
 def save_array_to_tiff( array, filename ):
     #d = np.array(  PIL.Image.open( fp    ).convert('I') )
@@ -234,7 +234,7 @@ def get_base_all_filenames( inDir, base_filename_cut_length = -7  ):
         reName = []
         for i in range(len(tifsc)): 
             if uf in tifsc[i]: 
-                files[uf].append( tifsc[i] )            
+                files[uf].append( inDir + tifsc[i] )            
                 reName.append(tifsc[i])
         for fn in reName:
             tifsc.remove(fn)
