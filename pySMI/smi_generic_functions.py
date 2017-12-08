@@ -11,7 +11,25 @@ import matplotlib.cm as mcm
 import copy, scipy 
 import PIL    
 
-def save_array_to_tiff( array, filename ):
+
+def get_phi_spacing( width_overlap_pixel):
+    '''get phi spacing by giving overlap pixel width for WAXS'''
+    return 7 - np.degrees( np.arctan2( width_overlap_pixel * 172 * 10**(-3), 275 ) )
+ 
+
+def get_pixel_overlap(phi_spacing):
+    '''get  overlap pixel width by giving phi spacing in degrees'''
+    #return 195  -  np.tan(np.radians(phi_spacing))/ (172 * 10**(-3)) * 275 
+    ps = np.tan(  np.radians( 7 - phi_spacing))/ (172 * 10**(-3)) * 275 
+    return int( np.ceil(  ps ) )
+           
+
+
+
+
+
+
+def save_array_to_tiff(array, filename ):
     #d = np.array(  PIL.Image.open( fp    ).convert('I') )
     img = PIL.Image.fromarray(array)
     #outp = ResDir + inf.split('/')[-1][:-4] + '_s.tif'
