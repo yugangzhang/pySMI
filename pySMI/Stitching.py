@@ -65,7 +65,7 @@ def check_stitch_two_imgs( img1, img2, overlap_width, badpixel_width =10 ):
 
 
 
-def Correct_Overlap_Images_Intensities( infiles,Data=None, window_length=101, polyorder=5, 
+def Correct_Overlap_Images_Intensities( infiles,Data=None, scale_smooth=None, window_length=101, polyorder=5, 
                                        overlap_width=58, badpixel_width =10  ):    
     """YG DEV Nov 19,2017 add data option
     YG Correct WAXS Images intensities by using overlap area intensity
@@ -113,7 +113,10 @@ def Correct_Overlap_Images_Intensities( infiles,Data=None, window_length=101, po
     else:
         Nf = len(Data)
     dataM = {}
-
+    if scale_smooth is not None:
+        scale_smooth_flag = False
+    else:
+        scale_smooth_flag = True
     for i in range( Nf ):
         if Data is None:
             d = np.array(  PIL.Image.open(infiles[i]).convert('I') ).T/1.0
@@ -124,20 +127,23 @@ def Correct_Overlap_Images_Intensities( infiles,Data=None, window_length=101, po
             data = np.zeros( [ M, N*Nf - w*( Nf -1) ]  )        
             data[:,  :N ] = d  
             scale=np.zeros( [len(infiles), M] )
-            scale_smooth=np.zeros( [len(infiles), M] )
+            if scale_smooth_flag:
+                scale_smooth=np.zeros( [len(infiles), M] )
+                scale_smooth[0] = 1
+                
             overlap_int = np.zeros(  [ 2* len(infiles) - 1, M]  )
             overlap_int[0] =  np.average( d[:, N - w: N-ow   ], axis=1)         
-            scale[0] = 1   
-            scale_smooth[0] = 1
+            scale[0] = 1 
             dataM[0] = d       
         else:        
             a1,a2, b1, b2 = N*i - w*(i-1) - ow,    N*(i+1) - w*i,     w - ow,  N 
             overlap_int[2*i-1] = np.average( d[:,  0: w - ow   ], axis=1  )
             overlap_int[2*i] =   np.average( d[:, N - w: N-ow   ] , axis=1  ) 
             scale[i] =   overlap_int[2*i-2]/overlap_int[2*i-1] *scale[i-1] 
-            scale_smooth[i] = sf( scale[i], window_length=window_length, polyorder= polyorder, deriv=0, delta=1.0, axis=-1,
+            if scale_smooth_flag:
+                scale_smooth[i] = sf( scale[i], window_length=window_length, polyorder= polyorder, deriv=0, delta=1.0, axis=-1,
                        mode='mirror', cval=0.0)           
-            data[:,a1:a2] = d[:, b1:b2  ] * np.repeat(scale_smooth[i], b2-b1, axis=0).reshape([M,b2-b1])
+            data[:,a1:a2] = d[:, b1:b2  ] * np.repeat(scale_smooth[i], b2-b1, axis=0).reshape([M,b2-b1])  
             dataM[i] = np.zeros_like( dataM[i-1])
             dataM[i][:,0:w-ow] =dataM[i-1][:,N-w:N-ow]
             dataM[i][:,w-ow:] = data[:,a1:a2] 
