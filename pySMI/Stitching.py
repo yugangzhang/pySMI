@@ -68,6 +68,10 @@ def check_stitch_two_imgs( img1, img2, overlap_width, badpixel_width =10 ):
 def Correct_Overlap_Images_Intensities( infiles,Data=None, scale_smooth=None, window_length=101, polyorder=5, 
                                        overlap_width=58, badpixel_width =10  ):    
     """YG DEV Nov 19,2017 add data option
+    
+    Bug correction: Jan 12, 2018, correct intensity difference between DataM and data
+                                  Now the intensity in the overlap area in DataM is same to the corresponding area in data
+    
     YG Correct WAXS Images intensities by using overlap area intensity
     Image intensity keep same for the first image
     Other image intensity is scaled by a pixel-width intensity array, which is averaged in the overlap area and then smoothed by 
@@ -147,6 +151,11 @@ def Correct_Overlap_Images_Intensities( infiles,Data=None, scale_smooth=None, wi
             dataM[i] = np.zeros_like( dataM[i-1])
             dataM[i][:,0:w-ow] =dataM[i-1][:,N-w:N-ow]
             dataM[i][:,w-ow:] = data[:,a1:a2] 
+            
+    for i in range( Nf ):
+        #print( i, N-w, N, N*(1+i)-w*i - w, N*(1+i) - w *i )
+        dataM[i][:,N-w:N] =  data[:, N*(1+i)-w*i - w: N*(1+i) - w *i]  
+        
     return data, dataM, scale,scale_smooth
 
 
