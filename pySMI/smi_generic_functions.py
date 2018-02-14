@@ -11,13 +11,11 @@ import matplotlib.cm as mcm
 import copy, scipy 
 import PIL    
 
- 
-    
-def average_images( infiles, shapes = [195, 1475], verbose=False ):
+
+def average_images( infiles,  verbose=False ):
     '''Do average of images by giving infiles
     Input:
-        infiles: list, a list of filename with full path
-        shapes: int list, the image shape
+        infiles: list, a list of filename with full path        
         verbose: if True, print how many files to be processed.
     Output:
         return average image, float array
@@ -25,10 +23,19 @@ def average_images( infiles, shapes = [195, 1475], verbose=False ):
     '''
     if verbose:
         print("There will be %s files to be averaged"%len(infiles) )
-    avg = np.zeros(shapes, dtype=np.float)
+    
     for i, inf in enumerate(infiles): 
+        if i==0:
+            img0 = np.array(  PIL.Image.open( inf    ).convert('I') )
+            shapes = img0.shape
+            avg = np.zeros(shapes, dtype=np.float)
         avg += np.array(  PIL.Image.open( inf    ).convert('I') )
     return avg/(i+1)
+
+
+
+ 
+    
 
     
 def get_phi_spacing( width_overlap_pixel):
