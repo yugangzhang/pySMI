@@ -83,8 +83,6 @@ import warnings
 #fs.register_handler('AD_EIGER2', EigerHandler2)
 
 
-
-
 mcolors = itertools.cycle(['b', 'g', 'r', 'c', 'm', 'y', 'k','darkgoldenrod','oldlace', 'brown','dodgerblue'   ])
 
 
