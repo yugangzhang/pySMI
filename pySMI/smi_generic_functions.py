@@ -11,6 +11,28 @@ import matplotlib.cm as mcm
 import copy, scipy 
 import PIL    
 
+def create_ring_mask( shape, r, center, mask=None):
+    '''YG. Sep 20, 2017 Develop@CHX 
+    Create 2D ring mask
+    input:
+        shape: two integer number  list, mask shape, e.g., [100,100]
+        r1: the inner radius
+        r2: the outer radius
+        center: two integer number  list, [cx,cy], ring center, e.g., [30,50]
+    output:
+        2D numpy array, 0,1 type
+    '''
+
+    m = np.zeros( shape, dtype= bool) 
+    rr,cc = circle(  center[1], center[0], r, shape=shape  )
+    m[rr,cc] = 1
+    #rr,cc = circle(  center[1], center[0], r1,shape=shape  )
+    #m[rr,cc] = 0 
+    if mask is not None:
+        m += mask
+    return m
+
+
 
 def average_images( infiles,  verbose=False ):
     '''Do average of images by giving infiles
@@ -23,7 +45,6 @@ def average_images( infiles,  verbose=False ):
     '''
     if verbose:
         print("There will be %s files to be averaged"%len(infiles) )
-    
     for i, inf in enumerate(infiles): 
         if i==0:
             img0 = np.array(  PIL.Image.open( inf    ).convert('I') )
@@ -31,9 +52,29 @@ def average_images( infiles,  verbose=False ):
             avg = np.zeros(shapes, dtype=np.float)
         avg += np.array(  PIL.Image.open( inf    ).convert('I') )
     return avg/(i+1)
+    
+    
+def sum_images( infiles,  verbose=False ):
+    '''Do sum of images by giving infiles
+    Input:
+        infiles: list, a list of filename with full path        
+        verbose: if True, print how many files to be processed.
+    Output:
+        return sum image, int array
+        
+    '''
+    if verbose:
+        print("There will be %s files to be summed"%len(infiles) )
+    
+    for i, inf in enumerate(infiles): 
+        if i==0:
+            img0 = np.array(  PIL.Image.open( inf    ).convert('I') )
+            shapes = img0.shape
+            avg = np.zeros(shapes, dtype=np.float)
+        avg += np.array(  PIL.Image.open( inf    ).convert('I') )
+    return avg    
 
-
-
+ 
  
     
 
@@ -285,7 +326,7 @@ def get_base_all_filenames( inDir, base_filename_cut_length = -7  ):
     return files
 
     
-def create_ring_mask( shape, r1, r2, center, mask=None):
+def create_ring_mask2( shape, r1, r2, center, mask=None):
     '''YG. Sep 20, 2017 Develop@CHX 
     Create 2D ring mask
     input:
