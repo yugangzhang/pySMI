@@ -171,7 +171,7 @@ def check_overlap_scaling_factor( scale,scale_smooth, i=1, filename=None,  save=
 
 
     
-def stitch_WAXS_in_Qspace( dataM, phis, calibration, x='Qr', y='Qz', statistic='sum',
+def stitch_WAXS_in_Qspace( dataM, phis, calibration, x='Qx', y='Qz', statistic='sum',
                           dx= 0, dy = 22, dz = 0, dq=0.015, mask = None  ):
     
     """
@@ -206,7 +206,7 @@ def stitch_WAXS_in_Qspace( dataM, phis, calibration, x='Qr', y='Qz', statistic='
 
     """
 
-    q_range = get_qmap_range( calibration, phis[0], phis[-1], x=x    )    
+    q_range = get_qmap_range( calibration, phis[0], phis[-1], x=x, y =y    )    
     if q_range[0] >0:
         q_range[0]= 0
     if q_range[2]>0:
@@ -232,13 +232,20 @@ def stitch_WAXS_in_Qspace( dataM, phis, calibration, x='Qr', y='Qz', statistic='
         calibration.set_angles(det_phi_g=phi, det_theta_g=0.,
                                       offset_x = dx, offset_y = dy, offset_z= dz)  
         calibration.clear_maps()
-        QZ = calibration.qz_map().ravel() #[pixel_list]
+        if y=='Qz':        
+            QZ = calibration.qz_map().ravel() #[pixel_list]
+        elif y=='Qy':
+            QZ = calibration.qy_map().ravel() #[pixel_list]
+        else:
+            QZ = calibration.q_map().ravel() #[pixel_list]
+        
         if x=='Qx':
             QX = calibration.qx_map().ravel() #[pixel_list]
         elif x=='Qy':
             QX = calibration.qy_map().ravel() #[pixel_list]
-        else:
+        else: #using 'Qr'
             QX = calibration.qr_map().ravel() #[pixel_list]
+            
         bins = [num_qz, num_qx]
         rangeq = [ [qz_min,qz_max], [qx_min,qx_max] ]
         #print( dM.shape, mask.shape )
@@ -286,7 +293,7 @@ def plot_qmap_in_folder( inDir ):
             
 
 
-def get_qmap_range( calibration, phi_min, phi_max, x='Qr' ):
+def get_qmap_range( calibration, phi_min, phi_max, x='Qx', y = 'Qz',det_theta_g=0., offset_x= 0,  offset_y= 22 ):
     '''YG Sep 27@SMI
     Get q_range, [ qx_start, qx_end, qz_start, qz_end ] for SMI WAXS qmap 
             (only rotate around z-axis, so det_theta_g=0.,actually being the y-axis for beamline conventional defination)
@@ -298,28 +305,71 @@ def get_qmap_range( calibration, phi_min, phi_max, x='Qr' ):
     Output:
         qrange: np.array([ qx_start, qx_end, qz_start, qz_end     ])
     '''
-    calibration.set_angles(det_phi_g= phi_max, det_theta_g=0., offset_x= 0,  offset_y= 22 )
-    calibration._generate_qxyz_maps()
-    if x=='Qx':
-        qx_end = np.max(calibration.qx_map_data)
-    elif x=='Qy':
-        qx_end = np.max(calibration.qy_map_data)
-    else:
-        qx_end = np.max(calibration.qr_map_data)    
-     
-    qz_start = np.min(calibration.qz_map_data)
-    qz_end = np.max(calibration.qz_map_data)
-    
-    calibration.set_angles(det_phi_g= phi_min, det_theta_g=0., offset_x= 0,  offset_y= 22 )
-    calibration._generate_qxyz_maps()
-    if x=='Qx':
-        qx_start = np.max(calibration.qx_map_data)
-    elif x=='Qy':
-        qx_start = np.max(calibration.qy_map_data)
-    else:
-        qx_start = np.max(calibration.qr_map_data) 
-   
-    return  np.array([ qx_start, qx_end, qz_start, qz_end     ]) 
+    #print(x,y)
+    qrang = np.zeros([4] )
+    for i, phi in enumerate([phi_min, phi_max]):
+        calibration.set_angles(det_phi_g= phi, det_theta_g=det_theta_g, offset_x= offset_x,  offset_y= offset_y )
+        calibration._generate_qxyz_maps()    
+        
+        if x=='Qx':            
+            if i==0:
+                qrang[0] = np.min(calibration.qx_map_data)
+            else:
+                qrang[1] = np.max(calibration.qx_map_data)
+        elif x=='Qy':
+            if i==0:
+                qrang[0] = np.min(calibration.qy_map_data)
+            else:
+                qrang[1] = np.max(calibration.qy_map_data)  
+        elif x=='Qz':
+            if i==0:
+                qrang[0] = np.min(calibration.qz_map_data)
+            else:
+                qrang[1] = np.max(calibration.qz_map_data)                 
+        elif x=='Qr':
+            if i==0:
+                qrang[0] = np.min(calibration.qr_map_data)
+            else:
+                qrang[1] = np.max(calibration.qr_map_data) 
+        elif x=='Q':
+            if i==0:
+                qrang[0] = np.min(calibration.qmap_data)
+            else:
+                qrang[1]= np.max(calibration.qmap_data) 
+                
+        else:
+            #print('Here')
+            print('Please give Qx or Qy or Qr or Q for x.')
+            
+        if y=='Qx':
+            if i==0:
+                qrang[2] = np.min(calibration.qx_map_data)
+            else:
+                qrang[3] = np.max(calibration.qx_map_data)
+        elif y=='Qy':
+            if i==0:
+                qrang[2] = np.min(calibration.qy_map_data)
+            else:
+                qrang[3] = np.max(calibration.qy_map_data) 
+        elif y=='Qz':
+            if i==0:
+                qrang[2] = np.min(calibration.qz_map_data)
+            else:
+                qrang[3] = np.max(calibration.qz_map_data)                 
+        elif y=='Qr':
+            if i==0:
+                qrang[2] = np.min(calibration.qrmap_data)
+            else:
+                qrang[3] = np.max(calibration.qrmap_data) 
+        elif y=='Q':
+            if i==0:
+                qrang[2] = np.min(calibration.qmap_data)
+            else:
+                qrang[3] = np.max(calibration.qmap_data) 
+        else:
+            print('Please give Qx or Qy or Qr or Q for y.')
+    print(phi_min, phi_max, qrang)
+    return  qrang
  
 
 def get_phi(filename, phi_offset= 0, phi_start= 4.5, phi_spacing= 4.0, polarity=-1,ext='_WAXS.tif'):
