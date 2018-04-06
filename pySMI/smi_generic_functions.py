@@ -32,7 +32,41 @@ def create_ring_mask( shape, r, center, mask=None):
         m += mask
     return m
 
+def get_data_sub_bkg(  sam, bk, filename_dict, scale=1, opt='avg'):
+    '''Dev April 8, 2018 Average/Sumup images and substract backgound
+    sam: sample name (should be in the keys of filename_dict)
+    bk:  background sample name (should be in the keys of filename_dict)
+    filename_dict: a dictionary containing key as sample name and value as the correponding filename list
+    opt: support avg or sum
+    return:  sam_intensity - bk_intensity * scale
+    '''
+    infbk = sorted(filename_dict[bk]) 
+    avgbk = images_opt( infbk, opt=opt, verbose= True )
+    
+    infsam = sorted(filename_dict[sam]) 
+    avgsam = images_opt( infsam, opt=opt, verbose= True )    
+    
+    return avgsam - avgbk * scale
 
+
+
+def images_opt( infiles, opt='sum',  verbose=False ):
+    '''Do average/sum of images by giving infiles
+    Input:
+        infiles: list, a list of filename with full path        
+        verbose: if True, print how many files to be processed.
+    Output:
+        return average image, float array
+        
+    '''
+    if opt=='sum':
+        return  sum_images( infiles,  verbose )
+    elif opt=='avg':
+        return average_images( infiles,  verbose )
+    else:
+        print('This func supports sum or avg .' )
+    
+    
 
 def average_images( infiles,  verbose=False ):
     '''Do average of images by giving infiles
@@ -44,7 +78,7 @@ def average_images( infiles,  verbose=False ):
         
     '''
     if verbose:
-        print("There will be %s files to be averaged"%len(infiles) )
+        print("There will be %s files to be averaged."%len(infiles) )
     for i, inf in enumerate(infiles): 
         if i==0:
             img0 = np.array(  PIL.Image.open( inf    ).convert('I') )
@@ -64,7 +98,7 @@ def sum_images( infiles,  verbose=False ):
         
     '''
     if verbose:
-        print("There will be %s files to be summed"%len(infiles) )
+        print("There will be %s files to be summed up."%len(infiles) )
     
     for i, inf in enumerate(infiles): 
         if i==0:
