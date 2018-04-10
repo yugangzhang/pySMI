@@ -11,6 +11,80 @@ import matplotlib.cm as mcm
 import copy, scipy 
 import PIL    
 
+
+
+def show_data_series(  sample_list, center=None, w= 50, vmin=10, vmax= None, figsize=[10,16]     ):
+    '''
+    sample_list: list of str, a list of filename (each filename will be full path)
+    center: the center of iamge (or direct beam pixel)
+    w: the ROI half size in pixel
+    vmin: the min intensity value for plot
+    vmax: if None, will be max intensity value of the ROI  
+    figsize: size of the plot (in inch)
+    
+    '''
+    
+    cy,cx = center
+    infs = sorted(sample_list)
+    N = len(infs)
+    sx = int( np.sqrt(N))
+    sy = int( np.ceil( N/sx ) )
+    
+    fig = plt.figure(   figsize =figsize  ) 
+    for i in range( N ):
+        #print(i)
+        ax = fig.add_subplot( sx, sy, i+1)
+        d = (np.array(  PIL.Image.open( infs[i] ).convert('I') ))[ cy-w:cy+w, cx-w:cx+w   ]
+        vmax= np.max(d)
+        #pritn(vmax)
+        vmin= 10#np.min(d)
+        show_img( (d[::-1]), logs = True, show_colorbar= False,show_ticks =False,
+                 ax= [fig, ax], image_name= '%02d'%(i+1), cmap = cmap_vge_hdr, 
+                 vmin= vmin, vmax= vmax,              
+                aspect=1, save=False, path=None)
+   
+
+
+
+def get_data_sub_bkg(  sam, bk, filename_dict, 
+                     exclude_sam_index=None, exclude_bk_index=None,  scale=1, opt='avg'):
+    '''Dev April 8, 2018 Average/Sumup images and substract backgound
+    sam: sample name (should be in the keys of filename_dict)
+    bk:  background sample name (should be in the keys of filename_dict)
+    filename_dict: a dictionary containing key as sample name and value as the correponding filename list
+    exclude_sam_index: if not None, should be list of bad sample spectra numbers (numbers start from 1 not 0)
+    exclude_bk_index: if not None, should be list of bad background spectra numbers (numbers start from 1 not 0)
+    opt: support avg or sum
+    return:  sam_intensity - bk_intensity * scale
+    '''
+    infbk = sorted(filename_dict[bk]) 
+    N = len(infbk)
+    if exclude_bk_index is not None:
+        infbk_ = []
+        for i in range(N):
+            if i not in (np.array(exclude_bk_index) -1):
+                infbk_.append(  infbk[i] )
+    else:
+        infbk_ = infbk
+    Nbk = float( len(infbk_)  )  
+    avgbk = images_opt( infbk_, opt=opt, verbose= True )
+    
+    infsam = sorted(filename_dict[sam]) 
+    N = len(infsam)
+    if exclude_sam_index is not None:
+        infsam_ = []
+        for i in range(N):
+            if i not in (np.array(exclude_sam_index) -1):
+                infsam_.append(  infsam[i] )
+    else:
+        infsam_ = infsam
+    avgsam = images_opt( infsam_, opt=opt, verbose= True )
+    Nsam = len(infsam_)    
+    
+    return avgsam - avgbk * scale * Nsam/Nbk
+
+
+
 def create_ring_mask( shape, r, center, mask=None):
     '''YG. Sep 20, 2017 Develop@CHX 
     Create 2D ring mask
@@ -32,21 +106,11 @@ def create_ring_mask( shape, r, center, mask=None):
         m += mask
     return m
 
-def get_data_sub_bkg(  sam, bk, filename_dict, scale=1, opt='avg'):
-    '''Dev April 8, 2018 Average/Sumup images and substract backgound
-    sam: sample name (should be in the keys of filename_dict)
-    bk:  background sample name (should be in the keys of filename_dict)
-    filename_dict: a dictionary containing key as sample name and value as the correponding filename list
-    opt: support avg or sum
-    return:  sam_intensity - bk_intensity * scale
-    '''
-    infbk = sorted(filename_dict[bk]) 
-    avgbk = images_opt( infbk, opt=opt, verbose= True )
-    
-    infsam = sorted(filename_dict[sam]) 
-    avgsam = images_opt( infsam, opt=opt, verbose= True )    
-    
-    return avgsam - avgbk * scale
+
+
+
+
+
 
 
 
