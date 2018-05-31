@@ -13,7 +13,9 @@ import PIL
 
 
 
-def show_data_series(  sample_list, center=None, w= 50, vmin=10, vmax= None, figsize=[10,16]     ):
+def show_data_series(  sample_list, center=None, w= 50, vmin=10, vmax= None, figsize=[10,16],
+                    save=False, path=None, filename=None, logs=True,
+                     rotate=False, upside_down= True, verbose=False):
     '''
     sample_list: list of str, a list of filename (each filename will be full path)
     center: the center of iamge (or direct beam pixel)
@@ -24,8 +26,10 @@ def show_data_series(  sample_list, center=None, w= 50, vmin=10, vmax= None, fig
     
     '''
     
-    cy,cx = center
-    infs = sorted(sample_list)
+    if center is not None:
+        cy,cx = center
+    infs = sample_list
+    #infs = sorted(sample_list)
     N = len(infs)
     sx = int( np.sqrt(N))
     sy = int( np.ceil( N/sx ) )
@@ -34,14 +38,26 @@ def show_data_series(  sample_list, center=None, w= 50, vmin=10, vmax= None, fig
     for i in range( N ):
         #print(i)
         ax = fig.add_subplot( sx, sy, i+1)
-        d = (np.array(  PIL.Image.open( infs[i] ).convert('I') ))[ cy-w:cy+w, cx-w:cx+w   ]
-        vmax= np.max(d)
+        if verbose:
+            print(i, infs[i] )
+        d = np.array(  PIL.Image.open( infs[i] ).convert('I') )
+        if center is not None:
+            d = d[ cy-w:cy+w, cx-w:cx+w   ]
+        if rotate:
+            d = d.T
+        if upside_down:
+            d = d[::-1]
+        if vmax is None:
+            vmax= np.max(d)
         #pritn(vmax)
-        vmin= 10#np.min(d)
-        show_img( (d[::-1]), logs = True, show_colorbar= False,show_ticks =False,
+        vmin= vmin         
+        show_img( (d ), logs = logs, show_colorbar= False,show_ticks =False,
                  ax= [fig, ax], image_name= '%02d'%(i+1), cmap = cmap_vge_hdr, 
                  vmin= vmin, vmax= vmax,              
-                aspect=1, save=False, path=None)
+                aspect=1, save=False, path= None)
+    if save:
+        fig.tight_layout()
+        fig.savefig( path +  filename +  '.png' )
    
 
 
