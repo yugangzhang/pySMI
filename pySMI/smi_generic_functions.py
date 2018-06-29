@@ -13,6 +13,88 @@ import PIL
 
 
 
+
+def find_index( x,x0,tolerance= None):
+    '''YG Octo 16,2017 copied from SAXS
+     find index of x0 in x
+     #find the position of P in a list (plist) with tolerance
+    '''
+ 
+    N=len(x)
+    i=0
+    if x0 > max(x):
+        position= len(x) -1
+    elif x0<min(x):
+         position=0
+    else:
+         position = np.argmin( np.abs( x - x0 ) )
+    return position
+
+
+
+from lmfit.models import LorentzianModel,lorentzian, ConstantModel
+from lmfit import Model
+
+def line(x, slope, intercept):
+    """a line"""
+    return slope*x + intercept
+def make_model(num, paras, fmod = LorentzianModel ):
+    amplitude, center, width = paras
+    pref = "f{0}_".format(num)
+    model = fmod(prefix = pref)
+    model.set_param_hint(pref+'amplitude', value=amplitude[num], min=0, max=5*amplitude[num])
+    model.set_param_hint(pref+'center', value=center[num], min=center[num]-0.5, max=center[num]+0.5)
+    model.set_param_hint(pref+'sigma', value=width[num], min=0, max=2)
+    return model
+
+def Get_CurveFit( x, y, peak_index, init_guess=[1,0.02], #amp, width, 
+                 xrange =None, fmod=LorentzianModel, background='line', ln_para=[40,20] ):
+    '''YG DEV@SMI, June 28, 2018
+       For fit curve by Lorenz peaks
+       Input:
+       x: x-array
+       y: y-array
+       peak_index: list of peaks in index
+       xrange: xrange in 
+       '''
+    pind = peak_index
+    peaks_in_interval = np.array([ pind ])
+    number_of_peaks = len(peaks_in_interval)
+    amplitude = [y[peaks_in_interval] *  init_guess[0]]
+    width = [np.ones_like(amplitude)  *  init_guess[1]]
+    center = [x[peaks_in_interval]]
+    paras = [  amplitude, center, width ]
+    mod = None
+    for i in range(len(peaks_in_interval)):
+        this_mod = make_model(i, paras, fmod)
+        if mod is None:
+            mod = this_mod
+        else:
+            mod = mod + this_mod
+    if background =='line':        
+        offset = Model(line) #ConstantModel()
+        offset.set_param_hint('slope', value=   ln_para[0]  )
+        offset.set_param_hint('intercept', value=  ln_para[1]     ) 
+    else:
+        offset=0
+    mod = mod + offset
+    if xrange is not None:
+        p1,p2 = xrange[0], xrange[1]
+        xf=x[p1:p2]
+        yf=y[p1:p2]
+    else:
+        xf=x
+        yf=y
+    out=mod.fit(yf, x=xf, method='nelder')
+    #plt.interactive(True)
+    #print(out.fit_report())
+    sgm, amp = out.best_values['f0_sigma'], out.best_values['f0_amplitude']
+    cen, fw, h =  out.best_values['f0_center'], 2*sgm, 0.3183099*amp/max(1.e-15, sgm) 
+    return cen,fw,h,out,xf
+
+
+
+
 def show_data_series(  sample_list, center=None, w= 50, vmin=10, vmax= None, figsize=[10,16],
                     save=False, path=None, filename=None, logs=True,
                      rotate=False, upside_down= True, verbose=False):
@@ -1918,9 +2000,12 @@ def show_img( image, ax=None,label_array=None, alpha=0.5, interpolation='nearest
         ax.set_aspect(aspect='auto')
         
     if show_colorbar:
-        cbar = fig.colorbar(im, extend='neither', spacing='proportional',
+        try:
+            cbar = fig.colorbar(im, extend='neither', spacing='proportional',
                 orientation='vertical' )
-        cbar.ax.tick_params(labelsize=colorbar_fontsize)        
+            cbar.ax.tick_params(labelsize=colorbar_fontsize)        
+        except:
+            pass
     fig.set_tight_layout(tight) 
     if save:
         if show_time:
