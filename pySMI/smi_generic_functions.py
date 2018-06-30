@@ -13,6 +13,47 @@ import PIL
 
 
 
+def average_array_withNan( array,  axis=0, mask=None):
+    '''YG. Jan 23, 2018
+       Average array invovling np.nan along axis       
+        
+       Input:
+           array: ND array, actually should be oneD or twoD at this stage..TODOLIST for ND
+           axis: the average axis
+           mask: bool, same shape as array, if None, will mask all the nan values 
+       Output:
+           avg: averaged array along axis
+    '''
+    shape = array.shape
+    if mask is None:
+        mask = np.isnan(array)
+        #mask = np.ma.masked_invalid(array).mask 
+    array_ = np.ma.masked_array(array, mask=mask) 
+    try:
+        sums = np.array( np.ma.sum( array_[:,:], axis= axis ) )
+    except:
+        sums = np.array( np.ma.sum( array_[:], axis= axis ) )
+        
+    cts = np.sum(~mask,axis=axis)
+    #print(cts)
+    return sums/cts
+
+def deviation_array_withNan( array,  axis=0, mask=None):
+    '''YG. Jan 23, 2018
+       Get the deviation of array invovling np.nan along axis       
+        
+       Input:
+           array: ND array
+           axis: the average axis
+           mask: bool, same shape as array, if None, will mask all the nan values 
+       Output:
+           dev: the deviation of array along axis
+    '''
+    avg2 = average_array_withNan( array**2, axis = axis, mask = mask )
+    avg = average_array_withNan( array, axis = axis, mask = mask )
+    return  np.sqrt( avg2 - avg**2 )
+
+
 
 def find_index( x,x0,tolerance= None):
     '''YG Octo 16,2017 copied from SAXS
@@ -1934,7 +1975,7 @@ def show_img( image, ax=None,label_array=None, alpha=0.5, interpolation='nearest
              aspect=None, logs=False,vmin=None,vmax=None,return_fig=False,cmap='viridis', 
              show_time= False, file_name =None, ylabel=None, xlabel=None, extent=None,
              show_colorbar=True, tight=True, show_ticks=True, save_format = 'png', dpi= None,
-             center=None,origin='lower', lab_fontsize = 16,  tick_size = 12, colorbar_fontsize = 8, 
+             center=None, center_size=None,origin='lower', lab_fontsize = 16,  tick_size = 12, colorbar_fontsize = 8, 
              *argv,**kwargs ):    
     """YG. Sep26, 2017 Add label_array/alpha option to show a mask on top of image
     
@@ -1956,11 +1997,9 @@ def show_img( image, ax=None,label_array=None, alpha=0.5, interpolation='nearest
         else:
             fig, ax = plt.subplots()
     else:
-        fig, ax=ax
-
-      
-    if center is not None:
-        plot1D(center[1],center[0],ax=ax, c='b', m='o', legend='')
+        fig, ax=ax      
+    if center is not None:        
+        plot1D(center[1],center[0],markersize=center_size,ax=ax, c='b', m='o', legend='')
     if not logs:
         im=imshow(ax, image, origin=origin,cmap=cmap,interpolation=interpolation, vmin=vmin,vmax=vmax,
                     extent=extent)  #vmin=0,vmax=1,
