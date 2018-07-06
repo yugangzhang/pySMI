@@ -12,6 +12,54 @@ import copy, scipy
 import PIL    
 
 
+def recover_img_from_iq(  qp, iq, center, mask):
+    '''YG. develop at CHX, 2017 July 18,
+    Recover image a circular average
+    '''        
+    norm = get_pixelist_interp_iq( qp,  iq, np.ones_like(mask), center)
+    img_ = norm.reshape( mask.shape)*mask
+    return img_
+
+def get_pixelist_interp_iq( qp, iq, ring_mask, center):
+    
+    qind, pixelist = roi.extract_label_indices(  ring_mask  )
+    #pixely = pixelist%FD.md['nrows'] -center[1]  
+    #pixelx = pixelist//FD.md['nrows'] - center[0]
+    
+    pixely = pixelist%ring_mask.shape[1] -center[1]  
+    pixelx = pixelist//ring_mask.shape[1]  - center[0]
+    
+    r= np.hypot(pixelx, pixely)              #leave as float.
+    #r= np.int_( np.hypot(pixelx, pixely)  +0.5  ) + 0.5  
+    return np.interp( r, qp, iq ) 
+
+
+
+def sum_array_withNan( array,  axis=0, mask=None):
+    '''YG. Jan 23, 2018
+       Average array invovling np.nan along axis       
+        
+       Input:
+           array: ND array, actually should be oneD or twoD at this stage..TODOLIST for ND
+           axis: the average axis
+           mask: bool, same shape as array, if None, will mask all the nan values 
+       Output:
+           avg: averaged array along axis
+    '''
+    shape = array.shape
+    if mask is None:
+        mask = np.isnan(array)
+        #mask = np.ma.masked_invalid(array).mask 
+    array_ = np.ma.masked_array(array, mask=mask) 
+    try:
+        sums = np.array( np.ma.sum( array_[:,:], axis= axis ) )
+    except:
+        sums = np.array( np.ma.sum( array_[:], axis= axis ) )
+        
+    #cts = np.sum(~mask,axis=axis)
+    #print(cts)
+    return sums 
+
 
 def average_array_withNan( array,  axis=0, mask=None):
     '''YG. Jan 23, 2018
@@ -71,67 +119,6 @@ def find_index( x,x0,tolerance= None):
          position = np.argmin( np.abs( x - x0 ) )
     return position
 
-
-
-from lmfit.models import LorentzianModel,lorentzian, ConstantModel
-from lmfit import Model
-
-def line(x, slope, intercept):
-    """a line"""
-    return slope*x + intercept
-def make_model(num, paras, fmod = LorentzianModel ):
-    amplitude, center, width = paras
-    pref = "f{0}_".format(num)
-    model = fmod(prefix = pref)
-    model.set_param_hint(pref+'amplitude', value=amplitude[num], min=0, max=5*amplitude[num])
-    model.set_param_hint(pref+'center', value=center[num], min=center[num]-0.5, max=center[num]+0.5)
-    model.set_param_hint(pref+'sigma', value=width[num], min=0, max=2)
-    return model
-
-def Get_CurveFit( x, y, peak_index, init_guess=[1,0.02], #amp, width, 
-                 xrange =None, fmod=LorentzianModel, background='line', ln_para=[40,20] ):
-    '''YG DEV@SMI, June 28, 2018
-       For fit curve by Lorenz peaks
-       Input:
-       x: x-array
-       y: y-array
-       peak_index: list of peaks in index
-       xrange: xrange in 
-       '''
-    pind = peak_index
-    peaks_in_interval = np.array([ pind ])
-    number_of_peaks = len(peaks_in_interval)
-    amplitude = [y[peaks_in_interval] *  init_guess[0]]
-    width = [np.ones_like(amplitude)  *  init_guess[1]]
-    center = [x[peaks_in_interval]]
-    paras = [  amplitude, center, width ]
-    mod = None
-    for i in range(len(peaks_in_interval)):
-        this_mod = make_model(i, paras, fmod)
-        if mod is None:
-            mod = this_mod
-        else:
-            mod = mod + this_mod
-    if background =='line':        
-        offset = Model(line) #ConstantModel()
-        offset.set_param_hint('slope', value=   ln_para[0]  )
-        offset.set_param_hint('intercept', value=  ln_para[1]     ) 
-    else:
-        offset=0
-    mod = mod + offset
-    if xrange is not None:
-        p1,p2 = xrange[0], xrange[1]
-        xf=x[p1:p2]
-        yf=y[p1:p2]
-    else:
-        xf=x
-        yf=y
-    out=mod.fit(yf, x=xf, method='nelder')
-    #plt.interactive(True)
-    #print(out.fit_report())
-    sgm, amp = out.best_values['f0_sigma'], out.best_values['f0_amplitude']
-    cen, fw, h =  out.best_values['f0_center'], 2*sgm, 0.3183099*amp/max(1.e-15, sgm) 
-    return cen,fw,h,out,xf
 
 
 
@@ -577,11 +564,11 @@ def create_ring_mask2( shape, r1, r2, center, mask=None):
 
     m = np.zeros( shape, dtype= bool) 
     rr,cc = circle(  center[1], center[0], r2, shape=shape  )
-    m[rr,cc] = 1
+    m[rr,cc] = True
     rr,cc = circle(  center[1], center[0], r1,shape=shape  )
-    m[rr,cc] = 0 
+    m[rr,cc] = False
     if mask is not None:
-        m += mask
+        m *= np.array(mask,dtype=bool)
     return m
 
 def get_image_edge(img):
