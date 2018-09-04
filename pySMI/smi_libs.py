@@ -42,7 +42,7 @@ import skbeam.core.utils as utils
 
 import numpy as np
 from datetime import datetime
-import h5py
+#import h5py
  
 import pims
 from pandas import DataFrame
