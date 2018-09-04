@@ -120,12 +120,13 @@ def find_index( x,x0,tolerance= None):
     return position
 
 
-
+ 
 
 
 def show_data_series(  sample_list, center=None, w= 50, vmin=10, vmax= None, figsize=[10,16],
-                    save=False, path=None, filename=None, logs=True,
-                     rotate=False, upside_down= True, verbose=False):
+                    save=False, path=None, filename=None, logs=True,aspect=1, extent=None,
+                     rotate=False, upside_down= True, verbose=False,  show_ticks =False,
+                     data_dict=None,  extent_dict=None, sx=None):
     '''
     sample_list: list of str, a list of filename (each filename will be full path)
     center: the center of iamge (or direct beam pixel)
@@ -138,19 +139,35 @@ def show_data_series(  sample_list, center=None, w= 50, vmin=10, vmax= None, fig
     
     if center is not None:
         cy,cx = center
-    infs = sample_list
-    #infs = sorted(sample_list)
-    N = len(infs)
-    sx = int( np.sqrt(N))
+    if data_dict is None:    
+        infs = sample_list
+        #infs = sorted(sample_list)
+        N = len(infs)
+    else:
+        ks = list( data_dict.keys() )
+        N = len(  ks )
+    if sx is None:
+        sx = int( np.sqrt(N))
     sy = int( np.ceil( N/sx ) )
     
     fig = plt.figure(   figsize =figsize  ) 
+    if filename is not None:
+        plt.title(filename, fontsize= 14, y =0.98)
+        plt.axis('off') 
     for i in range( N ):
         #print(i)
         ax = fig.add_subplot( sx, sy, i+1)
         if verbose:
             print(i, infs[i] )
-        d = np.array(  PIL.Image.open( infs[i] ).convert('I') )
+        if data_dict is None:
+            d = np.array(  PIL.Image.open( infs[i] ).convert('I') )
+        else:
+            k = ks[i]
+            d = data_dict[ k ]
+        if extent_dict is None:
+            extenti=extent
+        else:
+            extenti=extent_dict[k]            
         if center is not None:
             d = d[ cy-w:cy+w, cx-w:cx+w   ]
         if rotate:
@@ -161,10 +178,11 @@ def show_data_series(  sample_list, center=None, w= 50, vmin=10, vmax= None, fig
             vmax= np.max(d)
         #pritn(vmax)
         vmin= vmin         
-        show_img( (d ), logs = logs, show_colorbar= False,show_ticks =False,
+        show_img( (d ), logs = logs, show_colorbar= False,show_ticks =show_ticks,
                  ax= [fig, ax], image_name= '%02d'%(i+1), cmap = cmap_vge_hdr, 
-                 vmin= vmin, vmax= vmax,              
-                aspect=1, save=False, path= None)
+                 vmin= vmin, vmax= vmax,  
+                 extent=extenti,
+                aspect=aspect, save=False, path= None)
     if save:
         fig.tight_layout()
         fig.savefig( path +  filename +  '.png' )
