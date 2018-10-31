@@ -67,7 +67,7 @@ def check_stitch_two_imgs( img1, img2, overlap_width, badpixel_width =10 ):
 
 def Correct_Overlap_Images_Intensities( infiles,Data=None, scale_smooth=None, window_length=101, polyorder=5, 
                                        overlap_width=58, badpixel_width =10, do_smooth = True,
-                                       pixel_start_smooth = 0, pixel_stop_smooth = None  ):    
+                                       pixel_start_smooth = 0, pixel_stop_smooth = None, fill_overlap_img_num= 'second'  ):    
     """March 2018, update do_smooth option, if False, will not do smooth
                    update  pixel_start_smooth: by default=0, the starting pixel number for smoothing
                    update  pixel_stop_smooth: by default=None, the stop pixel nu number for smoothing
@@ -88,6 +88,10 @@ def Correct_Overlap_Images_Intensities( infiles,Data=None, scale_smooth=None, wi
     Input:
     infiles: list, full data filename, in format of tif
     Data: 3D array, data[i] is a frame
+    fill_overlap_img_num: option, 
+            if second,  will use the overlap area in the second image to fill the coresponding area in stitched image
+            if first,   will use the overlap area in the first image to fill the coresponding area in stitched image
+    
 
     Return: data: array, stitched image with corrected intensity
            dataM: dict, each value is the image with correted intensity
@@ -146,7 +150,8 @@ def Correct_Overlap_Images_Intensities( infiles,Data=None, scale_smooth=None, wi
             overlap_int = np.zeros(  [ 2* len(infiles) - 1, M]  )
             overlap_int[0] =  np.average( d[:, N - w: N-ow   ], axis=1)         
             scale[0] = 1 
-            dataM[0] = d       
+            dataM[0] = d  
+            
         else:        
             a1,a2, b1, b2 = N*i - w*(i-1) - ow,    N*(i+1) - w*i,     w - ow,  N 
             overlap_int[2*i-1] = np.average( d[:,  0: w - ow   ], axis=1  )
@@ -157,21 +162,45 @@ def Correct_Overlap_Images_Intensities( infiles,Data=None, scale_smooth=None, wi
                 scale[i][ps:pe] =   overlap_int[2*i-2][ps:pe]/overlap_int[2*i-1][ps:pe] *scale[i-1][ps:pe] 
                 scale_smooth[i][ps:pe] = sf( scale[i][ps:pe], window_length=window_length, polyorder= polyorder, deriv=0, delta=1.0, axis=-1, mode='mirror', cval=0.0) 
                 
-                #print(scale[i][ps:pe].shape, scale_smooth[i][ps:pe].shape)                
-                
-            if do_smooth:    
-                data[:,a1:a2] = d[:, b1:b2  ] * np.repeat(scale_smooth[i], b2-b1, axis=0).reshape([M,b2-b1])  
+                #print(scale[i][ps:pe].shape, scale_smooth[i][ps:pe].shape)    
+            if do_smooth:                     
+                data[:,a1:a2] = d[:, b1:b2  ] * np.repeat(scale_smooth[i], b2-b1, axis=0).reshape([M,b2-b1])                 
             else:
                 data[:,a1:a2] = d[:, b1:b2  ]  
                 scale_smooth = np.ones([ M,Nf] ).T
                 scale = np.ones( [M,Nf] ).T
+                
+                
             dataM[i] = np.zeros_like( dataM[i-1])
             dataM[i][:,0:w-ow] =dataM[i-1][:,N-w:N-ow]
             dataM[i][:,w-ow:] = data[:,a1:a2] 
             
+    if fill_overlap_img_num =='first':            
+        for i in range( Nf ):
+            if Data is None:
+                d = np.array(  PIL.Image.open(infiles[i]).convert('I') ).T/1.0
+            else:
+                d = Data[i].T
+              
+            a1,a2, b1, b2 = N*i - w*(i-1) - ow,    N*(i+1) - w*i,     w - ow,  N 
+            #print( a1, a2, b1, b2, w, M, N )
+            #print(    N * (1+i) - (i+1)*w,  N*(1+i) - i*w  )
+            
+            #print( data[:,  N * (1+i) - (i+1)*w,  N*(1+i) - i*w  ].shape, d[:,-w:].shape) 
+            
+            data[:,  N * (1+i) - (i+1)*w:  N*(1+i) - i*w  ] = ( d[:, -w :  ]  * 
+                                                    np.repeat( scale_smooth[i], w, axis=0).reshape([M,w])   )
+            
+            if i!=0:
+                dataM[i] = np.zeros_like( dataM[i-1])
+                dataM[i][:,0:w-ow] =dataM[i-1][:,N-w:N-ow]
+                dataM[i][:,w-ow:] = data[:,a1:a2]             
+        
+            
     for i in range( Nf ):
+        dataM[i][:,N-w:N] =  data[:, N*(1+i)-w*i - w  :   N*(1+i) - w *i] 
         #print( i, N-w, N, N*(1+i)-w*i - w, N*(1+i) - w *i )
-        dataM[i][:,N-w:N] =  data[:, N*(1+i)-w*i - w: N*(1+i) - w *i]  
+
         
     return data, dataM, scale,scale_smooth
 
