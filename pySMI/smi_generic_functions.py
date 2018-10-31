@@ -12,6 +12,184 @@ import copy, scipy
 import PIL    
 
 
+
+def angulars(edges, center, shape):
+    """
+    Draw annual (angluar-shaped) shaped regions of interest.
+    Each ring will be labeled with an integer. Regions outside any ring will
+    be filled with zeros.
+    Parameters
+    ----------
+    edges: list
+        giving the inner and outer angle in unit of radians
+        e.g., [(1, 2), (11, 12), (21, 22)]
+    center: tuple
+        point in image where r=0; may be a float giving subpixel precision.
+        Order is (rr, cc).
+    shape: tuple
+        Image shape which is used to determine the maximum extent of output
+        pixel coordinates. Order is (rr, cc).
+    Returns
+    -------
+    label_array : array
+        Elements not inside any ROI are zero; elements inside each
+        ROI are 1, 2, 3, corresponding to the order they are specified
+        in edges.
+    """
+    edges = np.atleast_2d(np.asarray(edges)).ravel() 
+    if not 0 == len(edges) % 2:
+        raise ValueError("edges should have an even number of elements, "
+                         "giving inner, outer radii for each angular")
+    if not np.all( np.diff(edges) > 0):         
+        raise ValueError("edges are expected to be monotonically increasing, "
+                         "giving inner and outer radii of each angular from "
+                         "r=0 outward")
+
+    angle_val = utils.angle_grid( center,  shape) .ravel()        
+     
+    return _make_roi(angle_val, edges, shape)
+
+
+def _make_roi(coords, edges, shape):
+    """ Helper function to create ring rois and bar rois
+    Parameters
+    ----------
+    coords : array
+        shape is image shape
+    edges : list
+        List of tuples of inner (left or top) and outer (right or bottom)
+        edges of each roi.
+        e.g., edges=[(1, 2), (11, 12), (21, 22)]
+    shape : tuple
+        Shape of the image in which to create the ROIs
+        e.g., shape=(512, 512)
+    Returns
+    -------
+    label_array : array
+        Elements not inside any ROI are zero; elements inside each
+        ROI are 1, 2, 3, corresponding to the order they are
+        specified in `edges`.
+        Has shape=`image shape`
+    """
+    label_array = np.digitize(coords, edges, right=False)
+    # Even elements of label_array are in the space between rings.
+    label_array = (np.where(label_array % 2 != 0, label_array, 0) + 1) // 2
+    return label_array.reshape(shape)
+
+
+
+
+def get_angular_mask( mask,  inner_angle= 0, outer_angle = 360, width = None, edges = None,
+                     num_angles = 12, center = None, dpix=[1,1], flow_geometry=False    ):
+     
+    ''' 
+    mask: 2D-array 
+    inner_angle # the starting angle in unit of degree
+    outer_angle #  the ending angle in unit of degree
+    width       # width of each angle, in degree, default is None, there is no gap between the neighbour angle ROI
+    edges: default, None. otherwise, give a customized angle edges
+    num_angles    # number of angles
+     
+    center: the beam center in pixel    
+    dpix, the pixel size in mm. For Eiger1m/4m, the size is 75 um (0.075 mm)
+    flow_geometry: if True, the angle should be between 0 and 180. the map will be a center inverse symmetry
+    
+    Returns
+    -------
+    ang_mask: a ring mask, np.array
+    ang_center: ang in unit of degree
+    ang_val: ang edges in degree
+    
+    '''
+    
+    #center, Ldet, lambda_, dpix= pargs['center'],  pargs['Ldet'],  pargs['lambda_'],  pargs['dpix']
+    
+    #spacing =  (outer_radius - inner_radius)/(num_rings-1) - 2    # spacing between rings
+    #inner_angle,outer_angle = np.radians(inner_angle),  np.radians(outer_angle)
+    
+    #if edges is  None:
+    #    ang_center =   np.linspace( inner_angle,outer_angle, num_angles )  
+    #    edges = np.zeros( [ len(ang_center), 2] )
+    #    if width is None:
+    #        width = ( -inner_angle + outer_angle)/ float( num_angles -1 + 1e-10 )
+    #    else:
+    #        width =  np.radians( width )
+    #    edges[:,0],edges[:,1] = ang_center - width/2, ang_center + width/2 
+        
+
+    if flow_geometry:
+        if edges is  None:
+            if inner_angle<0:
+                print('In this flow_geometry, the inner_angle should be larger than 0')
+            if outer_angle >180:
+                print('In this flow_geometry, the out_angle should be smaller than 180')
+            
+
+    if edges is None:
+        if num_angles!=1:
+            spacing =  (outer_angle - inner_angle - num_angles* width )/(num_angles-1)      # spacing between rings
+        else:
+            spacing = 0
+        edges = roi.ring_edges(inner_angle, width, spacing, num_angles) 
+
+    #print (edges)
+    angs = angulars( np.radians( edges ), center, mask.shape)    
+    ang_center = np.average(edges, axis=1)        
+    ang_mask = angs*mask
+    ang_mask = np.array(ang_mask, dtype=int)
+        
+    if flow_geometry:        
+        outer_angle -= 180
+        inner_angle -= 180 
+        edges2 = roi.ring_edges(inner_angle, width, spacing, num_angles)
+        #print (edges)
+        angs2 = angulars( np.radians( edges2 ), center, mask.shape)
+        ang_mask2 = angs2*mask
+        ang_mask2 = np.array(ang_mask2, dtype=int)        
+        ang_mask +=  ang_mask2    
+    else:
+        for i, (al, ah) in enumerate( edges ):
+            if al<=-180. and ah >-180:
+                #print(i+1, al,ah)
+                edge3 = np.array([  [ al + 360, 180 ]  ])       
+                ang3 = angulars( np.radians( edge3 ), center, mask.shape) * mask
+                w = np.ravel(  ang3 )==1
+                #print(w)
+                np.ravel( ang_mask )[w] = i+1
+                
+    
+    labels, indices = roi.extract_label_indices(ang_mask)
+    nopr = np.bincount( np.array(labels, dtype=int) )[1:]
+   
+    if len( np.where( nopr ==0 )[0] !=0):
+        #print (nopr)
+        print ("Some angs contain zero pixels. Please redefine the edges.")      
+    return ang_mask, ang_center, edges
+
+
+
+
+
+
+
+def get_goodlist( lists, good_pattern_list):
+    '''YG Dev Octo 2018@SMI find a subset of a list by  good pattern
+    Input:
+        lists: list, the list for searching
+        good_pattern_list: list, the list contains good patterns
+    Output:
+        return the good list contains pattern defined in good_pattern_list
+    
+    '''
+    gl = []
+    for l in lists:
+        for g in  good_pattern_list:
+            if g in l:
+                gl.append( l ) 
+    return gl
+
+
+
 def recover_img_from_iq(  qp, iq, center, mask):
     '''YG. develop at CHX, 2017 July 18,
     Recover image a circular average
@@ -229,7 +407,7 @@ def get_data_sub_bkg(  sam, bk, filename_dict,
 
 
 
-def create_ring_mask( shape, r, center, mask=None):
+def create_ring_mask( shape, r1, r2, center, mask=None):
     '''YG. Sep 20, 2017 Develop@CHX 
     Create 2D ring mask
     input:
@@ -242,14 +420,13 @@ def create_ring_mask( shape, r, center, mask=None):
     '''
 
     m = np.zeros( shape, dtype= bool) 
-    rr,cc = circle(  center[1], center[0], r, shape=shape  )
+    rr,cc = circle(  center[1], center[0], r2, shape=shape  )
     m[rr,cc] = 1
-    #rr,cc = circle(  center[1], center[0], r1,shape=shape  )
-    #m[rr,cc] = 0 
+    rr,cc = circle(  center[1], center[0], r1,shape=shape  )
+    m[rr,cc] = 0 
     if mask is not None:
         m += mask
     return m
-
 
 
 
@@ -1910,7 +2087,7 @@ def load_mask( path, mask_name, plot_ = False, reverse=False, *argv,**kwargs):
 
 
 
-def create_hot_pixel_mask(img, threshold, center=None, center_radius=300 ):
+def create_hot_pixel_mask(img, threshold, center=None, center_radius=300, outer_radius=0 ):
     '''create a hot pixel mask by giving threshold
        Input:
            img: the image to create hot pixel mask
@@ -1928,9 +2105,13 @@ def create_hot_pixel_mask(img, threshold, center=None, center_radius=300 ):
         from skimage.draw import  circle    
         imy, imx = img.shape   
         cy,cx = center        
-        rr, cc = circle( cy, cx, center_radius)
+        rr, cc = circle( cy, cx, center_radius,shape=img.shape )
         bst_mask[rr,cc] =0 
-    
+        if outer_radius:
+            bst_mask = np.zeros_like( img , dtype = bool)   
+            rr2, cc2 = circle( cy, cx, outer_radius,shape=img.shape )
+            bst_mask[rr2,cc2] =1
+            bst_mask[rr,cc] =0 
     hmask = np.ones_like( img )
     hmask[np.where( img * bst_mask  > threshold)]=0
     return hmask
