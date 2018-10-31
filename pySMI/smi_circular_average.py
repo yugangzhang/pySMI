@@ -357,7 +357,7 @@ def plot_circular_average( qp, iq, q,  pargs, show_pixel= False, loglog=False,
         title = ax1.set_title('%s_Circular Average'%uid)  
     else:
         if loglog:
-            ax1.loglog(qp, iq, '-o')
+            ax1.loglog(q, iq, '-o')
         else:            
             ax1.semilogy(q,  iq , '-o') 
         ax1.set_xlabel('q ('r'$\AA^{-1}$)')        
