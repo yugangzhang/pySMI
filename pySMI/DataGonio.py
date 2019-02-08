@@ -227,7 +227,11 @@ class Mask(object):
 # Calibration
 ################################################################################    
 class Calibration(object):
-    '''Stores aspects of the experimental setup; especially the calibration
+    ''' Devloped by Kevin. Yager 
+    Copied from  https://github.com/CFN-softbio/SciAnalysis/blob/master/SciAnalysis/XSAnalysis/Data.py
+    Till Nov 20, 2018--> Without modification
+    
+    Stores aspects of the experimental setup; especially the calibration
     parameters for a particular detector. That is, the wavelength, detector
     distance, and pixel size that are needed to convert pixel (x,y) into
     reciprocal-space (q) value.
@@ -495,8 +499,13 @@ class Calibration(object):
 ################################################################################    
 class CalibrationGonio(Calibration):
     """
+    Initially developed by Kevin. Yager
+    Add sample rotation angles by Yugang Zhang
+    
     The geometric claculations used here are described:
     http://gisaxs.com/index.php/Geometry:WAXS_3D
+    
+    
     
     """    
     
@@ -507,6 +516,8 @@ class CalibrationGonio(Calibration):
                    sam_phi=0, sam_chi=0, sam_theta=0,
                    offset_x = 0, offset_y =0, offset_z=0):
         '''
+        
+        
         YG. Add sample rotation angles that convert qmap from lab frame to sample frame
         All the angles are given in degrees
         
@@ -529,7 +540,7 @@ class CalibrationGonio(Calibration):
         self.offset_x = offset_x
         self.offset_y = offset_y
         self.offset_z = offset_z
-        self.sam_phi=sam_phi        
+        self.sam_phi=sam_phi   #incident angle       
         self.sam_chi= sam_chi
         self.sam_theta=sam_theta
         
@@ -587,16 +598,12 @@ class CalibrationGonio(Calibration):
         self.q_map_lab_data =  np.sqrt(np.square(self.qx_map_lab_data) +
                                        np.square(self.qy_map_lab_data) +
                                        np.square(self.qz_map_lab_data)
-                                     )
-
-       
-        
+                                     )       
         
     def get_ratioDw(self):
         
         width_mm = self.width*self.pixel_size_um/1000.
         return self.distance_m/(width_mm/1000.)
-
 
     # Maps
     ########################################
@@ -619,59 +626,68 @@ class CalibrationGonio(Calibration):
         The geometric claculations used here are described:
         http://gisaxs.com/index.php/Geometry:WAXS_3D
         
-        """    
+        In this calculation, X-ray along y direction, up is z-direction, outward is x dir
+        det_phi_g, rotate along z dir
+        det_theta_g, rotate along x dir
         
+        For SMI, only rotate along z-dir (only det_phi_g !=0)
+        
+        """            
         d = self.distance_m
         pix_size = self.pixel_size_um/1e6
         phi_g = np.radians(self.det_phi_g)
-        theta_g = np.radians(self.det_theta_g)
-        
+        theta_g = np.radians(self.det_theta_g)        
         xs = (np.arange(self.width) - self.x0)*pix_size
         ys = (np.arange(self.height) - self.y0)*pix_size
         #ys = ys[::-1]
-
         X_c, Y_c = np.meshgrid(xs, ys)
         Dprime = np.sqrt( np.square(d) + np.square(X_c) + np.square(Y_c) )
-        k_over_Dprime = self.get_k()/Dprime
-        
-        
+        k_over_Dprime = self.get_k()/Dprime  
         qx_c = k_over_Dprime*( X_c*np.cos(phi_g) - np.sin(phi_g)*(d*np.cos(theta_g) - Y_c*np.sin(theta_g)) )
         qy_c = k_over_Dprime*( X_c*np.sin(phi_g) + np.cos(phi_g)*(d*np.cos(theta_g) - Y_c*np.sin(theta_g)) - Dprime )
         qz_c = -1*k_over_Dprime*( d*np.sin(theta_g) + Y_c*np.cos(theta_g) )
 
         qr_c = np.sqrt(np.square(qx_c) + np.square(qy_c))        
-        q_c = np.sqrt(np.square(qx_c) + np.square(qy_c) + np.square(qz_c))
+        q_c = np.sqrt(np.square(qx_c) + np.square(qy_c) + np.square(qz_c)) 
         
         
         
-        
+        #######why use this following part
         # Conversion factor for pixel coordinates
         # (where sample-detector distance is set to d = 1)
-        c = (self.pixel_size_um/1e6)/self.distance_m
-        
+        c = (self.pixel_size_um/1e6)/self.distance_m        
         x = np.arange(self.width) - self.x0
         y = np.arange(self.height) - self.y0
         X, Y = np.meshgrid(x, y)
-        R = np.sqrt(X**2 + Y**2)
-        
+        R = np.sqrt(X**2 + Y**2)        
         #twotheta = np.arctan(self.r_map()*c) # radians
         theta_f = np.arctan2( X*c, 1 ) # radians
-        #alpha_f_prime = np.arctan2( Y*c, 1 ) # radians
-        alpha_f = np.arctan2( Y*c*np.cos(theta_f), 1 ) # radians
+        alpha_f_prime = np.arctan2( Y*c, 1 ) # radians
+        alpha_f = np.arctan2( Y*c*np.cos(theta_f), 1 ) # radians            
+        #print(c)
+        self.alpha_f = alpha_f 
+        self.theta_f  = theta_f
+        self.qx_map_data2 = self.get_k()*np.sin(theta_f)*np.cos(alpha_f_prime)
+        self.qy_map_data2 = self.get_k()*( np.cos(theta_f)*np.cos(alpha_f_prime) - 1 ) # TODO: Check sign
+        self.qz_map_data2 = -1.0*self.get_k()*np.sin(alpha_f_prime) 
         
+        self.qr_map_data2 = np.sign(self.qx_map_data2)*np.sqrt(np.square(self.qx_map_data2) + np.square(self.qy_map_data2))   
         
-        self.qx_map_data = self.get_k()*np.sin(theta_f)*np.cos(alpha_f)
-        self.qy_map_data = self.get_k()*( np.cos(theta_f)*np.cos(alpha_f) - 1 ) # TODO: Check sign
-        self.qz_map_data = -1.0*self.get_k()*np.sin(alpha_f)
-        
-        self.qr_map_data = np.sign(self.qx_map_data)*np.sqrt(np.square(self.qx_map_data) + np.square(self.qy_map_data))
-
+        ##################  
         
         self.qx_map_data = qx_c
         self.qy_map_data = qy_c
-        self.qz_map_data = qz_c
+        self.qz_map_data = -qz_c
         self.q_map_data = q_c    
-    
+        self.qr_map_data = np.sign(self.qx_map_data)*np.sqrt(np.square(self.qx_map_data) + np.square(self.qy_map_data)) 
+ 
+        # convert to sample coordinates
+        alpha = np.radians(self.sam_phi)
+        Qn = -qz_c * np.cos(alpha) + qy_c * np.sin(alpha)
+        Qr = np.sqrt(q_c*q_c-Qn*Qn)*np.sign(qx_c)        
+        self.qr_map_data = Qr
+        self.qn_map_data = Qn 
+        #print('here')
     
     def _generate_qxyz_maps(self):
         """
@@ -681,25 +697,21 @@ class CalibrationGonio(Calibration):
         YG add offset corrections at Sep 21, 2017
         """    
         
-        #print('Here to get qmap without offset.')
+        #print('Here to get qmap with offset.')
         
         d = self.distance_m #
         pix_size = self.pixel_size_um/1e6  #in meter
         phi_g = np.radians(self.det_phi_g)
-        theta_g = np.radians(self.det_theta_g)        
-        
+        theta_g = np.radians(self.det_theta_g)  
         offset_x = self.offset_x  *pix_size  #in meter
         offset_y = self.offset_y  *pix_size
         offset_z = self.offset_z  *pix_size
-        
         xs = (np.arange(self.width) - self.x0)*pix_size 
-        ys = (np.arange(self.height) - self.y0)*pix_size 
-        
+        ys = (np.arange(self.height) - self.y0)*pix_size         
         xsprime = xs -  offset_x
         dprime  = d -   offset_y
         ysprime = ys  - offset_z
         #ys = ys[::-1]
-
         X_c, Y_c = np.meshgrid(xsprime, ysprime)
         #Dprime = np.sqrt( np.square(d) + np.square(X_c) + np.square(Y_c) )
         #k_over_Dprime = self.get_k()/Dprime
@@ -726,32 +738,254 @@ class CalibrationGonio(Calibration):
         self.q_map_data = q_c
         self.qr_map_data = qr_c
         
+        # convert to sample coordinates
+        alpha = np.radians(self.sam_phi)
+        Qn = -qz_c * np.cos(alpha) + qy_c * np.sin(alpha)
+        Qr = np.sqrt(q_c*q_c-Qn*Qn)*np.sign(qx_c)        
+        self.qr_map_data = Qr
+        #self.qn_map_data = Qn 
+        self.qz_map_data = Qn 
+        #print('here')
         
         
         
-        if False:#True:
-            # Conversion factor for pixel coordinates
-            # (where sample-detector distance is set to d = 1)
-            c = (self.pixel_size_um/1e6)/self.distance_m
-
-            x = np.arange(self.width) - self.x0
-            y = np.arange(self.height) - self.y0
-            X, Y = np.meshgrid(x, y)
-            R = np.sqrt(X**2 + Y**2)
-
-            #twotheta = np.arctan(self.r_map()*c) # radians
-            theta_f = np.arctan2( X*c, 1 ) # radians
-            #alpha_f_prime = np.arctan2( Y*c, 1 ) # radians
-            alpha_f = np.arctan2( Y*c*np.cos(theta_f), 1 ) # radians
-
-
-            self.qx_map_data1 = self.get_k()*np.sin(theta_f)*np.cos(alpha_f)
-            self.qy_map_data1 = self.get_k()*( np.cos(theta_f)*np.cos(alpha_f) - 1 ) # TODO: Check sign
-            self.qz_map_data1 = -1.0*self.get_k()*np.sin(alpha_f)
-
-            self.qr_map_data1 = np.sign(self.qx_map_data1)*np.sqrt(np.square(self.qx_map_data1) + np.square(self.qy_map_data1))
-
         
+ # CalibrationRQconv
+################################################################################    
+class CalibrationRQconv(Calibration):
+    """
+    Developed by K.Yager
+    Copied from https://github.com/CFN-softbio/SciAnalysis/blob/master/SciAnalysis/XSAnalysis/DataRQconv.py
+    
+    The geomatric claculations used here are described in Yang, J Synch Rad (2013) 20, 211–218
+    http://dx.doi.org/10.1107/S0909049512048984
+    
+    """    
+    
+    
+    def __init__(self, wavelength_A=None, distance_m=None, pixel_size_um=None, det_orient=0., det_tilt=0., det_phi=0., incident_angle=0., sample_normal=0.):
+        
+        self.det_orient = det_orient
+        self.det_tilt = det_tilt
+        self.det_phi = det_phi
+        
+        self.incident_angle = incident_angle
+        self.sample_normal = sample_normal
+        
+        
+        self.rot_matrix = None
+        super().__init__(wavelength_A=wavelength_A, distance_m=distance_m, pixel_size_um=pixel_size_um)
+            
+    
+    # Experimental parameters
+    ########################################
+    
+    def set_angles(self, det_orient=0, det_tilt=0, det_phi=0, det_roty=0, incident_angle=0., 
+                   sample_normal=0.):
+        self.det_orient = det_orient
+        self.det_tilt = det_tilt
+        self.det_phi = det_phi
+        self.det_roty = det_roty
 
+        self.incident_angle = incident_angle
+        self.sample_normal = sample_normal
+    
+    def get_ratioDw(self):
+        
+        width_mm = self.width*self.pixel_size_um/1000.
+        return self.distance_m/(width_mm/1000.)
+
+
+    # Maps
+    ########################################
+    
+    def q_map(self):
+        '''Returns a 2D map of the q-value associated with each pixel position
+        in the detector image.'''
+
+        if self.q_map_data is None:
+            self._generate_maps()
+        
+        return self.q_map_data
+    
+    def angle_map(self):
+        '''Returns a map of the angle for each pixel (w.r.t. origin).
+        0 degrees is vertical, +90 degrees is right, -90 degrees is left.'''
+
+        if self.angle_map_data is not None:
+            self._generate_maps()
+        
+        return self.angle_map_data
+    
+    def qx_map(self):
+        if self.qx_map_data is None:
+            self._generate_maps()
+        
+        return self.qx_map_data    
+
+    def qy_map(self):
+        if self.qy_map_data is None:
+            self._generate_maps()
+        
+        return self.qy_map_data    
+
+    def qz_map(self):
+        if self.qz_map_data is None:
+            self._generate_maps()
+        
+        return self.qz_map_data    
+    
+    def qr_map(self):
+        if self.qr_map_data is None:
+            self._generate_maps()
+
+        return self.qr_map_data
+    
+    
+    def _generate_maps(self):
+        """
+        calculate all coordinates (pixel position as well as various derived values)
+        all coordinates are stored in 2D arrays, as is the data itself in Data2D
+        """
+        
+        #self.calc_rot_matrix()
+        self.calc_rot_matrix_SMI()
+        
+        (w,h) = (self.width, self.height)
+        self.X = np.repeat(np.arange(w), h).reshape((w, h)).T
+        X = self.X.flatten()
+        Y = np.repeat(np.arange(h), w)
+        self.Y = Y.reshape((h, w))
+        
+        (Q, Phi, Qx, Qy, Qz, Qr, Qn, FPol, FSA) = self.calc_from_XY(X, Y, calc_cor_factors=True)
+                
+        self.q_map_data = Q.reshape((h, w))
+        
+        self.qx_map_data = Qx.reshape((h, w))
+        self.qy_map_data = -Qy.reshape((h, w))  #YG add -
+        self.qz_map_data = -Qz.reshape((h, w))  #YG add -
+        
+        self.qr_map_data = Qr.reshape((h, w))        
+        self.qn_map_data = -Qn.reshape((h, w))  #YG add -
+        
+        self.angle_map_data = np.degrees( Phi.reshape((h, w)) )
+        self.FPol_map_data = FPol.reshape((h, w))
+        self.FSA_map_data = FSA.reshape((h, w))
+        
+        
+        
+        
+    # q calculation
+    ########################################
+        
+    def calc_from_XY(self, X, Y, calc_cor_factors=False):
+        """
+        calculate Q values from pixel positions X and Y
+        X and Y are 1D arrays
+        returns reciprocal/angular coordinates, optionally returns 
+        always calculates Qr and Qn, therefore incident_angle needs to be set 
+        Note that Phi is saved in radians; but the angles in ExpPara are in degrees
+        """
+        if self.rot_matrix is None:
+            raise ValueError('the rotation matrix is not yet set.')
+
+        # the position vectors for each pixel, origin at the postion of beam impact
+        # R.shape should be (3, w*h), but R.T is more convinient for matrix calculation
+        # RT.T[i] is a vector
+        RT = np.vstack((X - self.x0, -(Y - self.y0), 0.*X))
+        
+        dr = self.get_ratioDw()*self.width
+        # position vectors in lab coordinates, sample at the origin
+        [X1, Y1, Z1] = np.dot(self.rot_matrix, RT)
+        Z1 -= dr
+        
+        # angles
+        r3sq = X1*X1+Y1*Y1+Z1*Z1
+        r3 = np.sqrt(r3sq)
+        r2 = np.sqrt(X1*X1+Y1*Y1)
+        Theta = 0.5*np.arcsin(r2/r3)
+        Phi = np.arctan2(Y1, X1) + np.radians(self.sample_normal)
+
+        Q = 2.0*self.get_k()*np.sin(Theta)
+
+        # lab coordinates
+        Qz = Q*np.sin(Theta)
+        Qy = Q*np.cos(Theta)*np.sin(Phi)
+        Qx = Q*np.cos(Theta)*np.cos(Phi)
+
+        # convert to sample coordinates
+        alpha = np.radians(self.incident_angle)
+        Qn = Qy*np.cos(alpha) + Qz*np.sin(alpha)
+        Qr = np.sqrt(Q*Q-Qn*Qn)*np.sign(Qx)
+        
+        if calc_cor_factors==True:
+            FPol = (Y1*Y1+Z1*Z1)/r3sq
+            FSA = np.power(np.fabs(Z1)/r3, 3)
+            return (Q, Phi, Qx, Qy, Qz, Qr, Qn, FPol, FSA)
+        else:
+            return (Q, Phi, Qx, Qy, Qz, Qr, Qn)
+    
+    
+    # Rotation calculation
+    ########################################
+    
+    
+    def RotationMatrix(self, axis, angle):
+        if axis=='x' or axis=='X':
+            rot = np.asarray(
+                [[1., 0., 0.],
+                [0., np.cos(angle), -np.sin(angle)],
+                [0., np.sin(angle),  np.cos(angle)]])
+        elif axis=='y' or axis=='Y':
+            rot = np.asarray(
+                [[ np.cos(angle), 0., np.sin(angle)],
+                [0., 1., 0.],
+                [-np.sin(angle), 0., np.cos(angle)]])
+        elif axis=='z' or axis=='Z':
+            rot = np.asarray(
+                [[np.cos(angle), -np.sin(angle), 0.],
+                [np.sin(angle),  np.cos(angle), 0.],
+                [0., 0., 1.]])
+        else:
+            raise ValueError('unkown axis %s' % axis)
+        
+        return rot 
+
+
+    def calc_rot_matrix(self):
+        
+        # First rotate detector about x-ray beam
+        tm1 = self.RotationMatrix('z', np.radians(-self.det_orient))
+        
+        # Tilt detector face (so that it is not orthogonal to beam)
+        tm2 = self.RotationMatrix('y', np.radians(self.det_tilt))
+        
+        # Rotate detector about x-ray beam
+        tm3 = self.RotationMatrix('z', np.radians(self.det_orient+self.det_phi))
+        self.rot_matrix = np.dot(np.dot(tm3, tm2), tm1)
+            
+            
+    def calc_rot_matrix_SMI(self):        
+        tm1 = self.RotationMatrix('z', np.radians(self.det_roty)) 
+        self.rot_matrix =   tm1            
+            
+    
+    
+    
+    # End class CalibrationRQconv(Calibration)
+    ########################################       
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
         
     

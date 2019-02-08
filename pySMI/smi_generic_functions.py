@@ -1,4 +1,6 @@
 from pySMI.smi_libs import *
+from pySMI.DataGonio import qphiavg
+
 #from tqdm import *
 from pySMI.smi_libs import  ( colors,  markers )
 from scipy.special import erf
@@ -11,6 +13,168 @@ import matplotlib.cm as mcm
 import copy, scipy 
 import PIL    
 
+
+
+
+def get_qmap_cor( qmap_fp, qx_fp, qz_fp):  
+    '''Giving  to load qmap and x/y coordination''' 
+    xs = np.loadtxt(   qx_fp   )
+    zs = np.loadtxt(   qz_fp   )
+    qmap = np.array(  PIL.Image.open(   qmap_fp   ).convert('I') )
+    return qmap, xs,zs #qmap_data, qmap_xcor, qmap_ycor
+
+def get_qmap_mask(qmap_data):  
+    '''Giving  qmap  to get mask'''
+    mask = np.ones_like(qmap_data, dtype=bool)
+    mask[:,:5] = 0 #left edge
+    mask[:,-5:] = 0 #right edge
+    mask[:5,:] = 0 #upper edge
+    mask[-5:,:] = 0 #lower edge
+    mask.ravel()[np.where(qmap_data.ravel()==0)] = 0 
+    return mask
+
+def get_QPhiMap(img_shape, center):
+    '''Get q_map and phi_map by giving image shape and center'''
+    q_map = utils.radial_grid( center, img_shape, pixel_size= [1,1] )
+    phi_map = np.degrees( utils.angle_grid(center, img_shape,) )
+    return q_map, phi_map
+
+def get_img_qphimap(img, q_map, phi_map, mask, bins,center, 
+                    qang_range=None, statistic='mean'):
+    '''Get phi_map by giving image'''
+    sqphi,  qs,  phis = qphiavg(img, q_map=q_map, phi_map=phi_map, mask=mask, bins= bins,
+            origin= center, range=qang_range, statistic=statistic) #statistic='mean')
+    return sqphi,  qs,  phis
+
+def get_iq_from_sqphi( sqphi ):
+    return np.nan_to_num( average_array_withNan( sqphi, axis=1 ) )
+
+def get_phi_from_sqphi( sqphi):
+    return np.nan_to_num( average_array_withNan( sqphi, axis=0 ) )
+
+
+
+
+
+
+
+def Get_Inten_QphiMap(  qmap, qx, qz,  setup_pargs, q_bins=600, ang_bins=180):  
+    '''YG DEV@SMI Giving qmap,qx,qz, setup pargs ang_bins number to get Qphi map
+    Input:
+        qmap: 2D array
+        qx: qx coordination
+        qz: qz coordination
+        setup_pargs: dict, e.g., setup_pargs={};setup_pargs['center']=[120,7]
+        q_bins: the number of q bins
+        ang_bins: the numbe of ang bins
+    
+    Return:
+        sqphi: qphi map                
+        q: q val (in real unit) of qphi map
+        phis: phi (in real angle) val of qphi map        
+        q_pix: q val (in pixel) of qphi map
+        phis_pix: phi (in pixel) val of qphi map    
+         
+    '''
+    
+    mask = get_qmap_mask(qmap)     
+    center = setup_pargs['center']
+    qpix_map, phi_ang_map = get_QPhiMap(mask.shape, center)
+    
+    Qxzmap = np.meshgrid( qx, qz )
+    Qmap = np.hypot( Qxzmap[0], Qxzmap[1]   )
+    _,  q,  phis = get_img_qphimap( qmap, Qmap, phi_ang_map, mask,
+                    bins=[ q_bins,ang_bins],center=center, qang_range=None, statistic='mean')    
+    sqphi,  _, _ = get_img_qphimap(qmap, qpix_map, phi_ang_map, mask,
+                bins=[ q_bins,ang_bins],center=center, qang_range=None, statistic='mean')
+    q_pix, phis_pix = np.arange( sqphi.shape[0]), np.arange( sqphi.shape[1]) 
+    return sqphi, q, phis, q_pix, phis_pix
+
+
+
+
+
+
+def get_qI_from_sqphi( qpix, q, sqphi, ang_range=None, phis=None, ang_unit= 'deg'  ):
+    '''Get angle-averaged sqphi by giving inten_qphi map
+    ang_range: 
+    ang_unit: 'pix' or 'deg'
+    
+    '''
+    if ang_range is not None:
+        a1,a2 = ang_range
+        if ang_unit =='deg':
+            ap1, ap2 = find_index( phis, a1 ), find_index( phis, a2 ) 
+        else:
+            ap1, ap2 = a1, a2
+        sqphi_ = sqphi[:, ap1:ap2 ]
+    else:
+        sqphi_ = sqphi    
+    d =  average_array_withNan( sqphi_, axis=1 )
+    ma = ~np.isnan(d)
+    return qpix[ma], q[ma], d[ma]
+
+def get_angI_from_sqphi( angpix, ang, sqphi, q_range=None, q=None, q_unit= 'pix'  ):
+    '''Get Q-averaged sqphi by giving inten_qphi map
+     
+    q_unit: 'pix' or 'A'
+    
+    '''
+    if q_range is not None:
+        q1,q2 = q_range
+        if q_unit =='A':
+            qp1, qp2 = find_index( q, q1 ), find_index( q, q2 ) 
+        else:
+            qp1, qp2 = q1, q1
+        sqphi_ = sqphi[ qp1:qp2 ]
+    else:
+        sqphi_ = sqphi    
+    d =  average_array_withNan( sqphi_, axis=0 )
+    ma = ~np.isnan(d)
+    return angpix[ma], ang[ma], d[ma]
+
+
+
+
+def average_array_withNan( array,  axis=0, mask=None):
+    '''YG. Jan 23, 2018
+       Average array invovling np.nan along axis       
+        
+       Input:
+           array: ND array, actually should be oneD or twoD at this stage..TODOLIST for ND
+           axis: the average axis
+           mask: bool, same shape as array, if None, will mask all the nan values 
+       Output:
+           avg: averaged array along axis
+    '''
+    shape = array.shape
+    if mask is None:
+        mask = np.isnan(array)
+        #mask = np.ma.masked_invalid(array).mask 
+    array_ = np.ma.masked_array(array, mask=mask) 
+    try:
+        sums = np.array( np.ma.sum( array_[:,:], axis= axis ) )
+    except:
+        sums = np.array( np.ma.sum( array_[:], axis= axis ) )
+        
+    cts = np.sum(~mask,axis=axis)
+    #print(cts)
+    return sums/cts
+
+def deviation_array_withNan( array,  axis=0, mask=None):
+    '''YG. Jan 23, 2018
+       Get the deviation of array invovling np.nan along axis       
+        
+       Input:
+           array: ND array
+           axis: the average axis
+           mask: bool, same shape as array, if None, will mask all the nan values 
+       Output:
+           dev: the deviation of array along axis
+    '''
+    avg2 = average_array_withNan( array**2, axis = axis, mask = mask )
+    avg = average_array_withNan( array, axis = axis, mask = mask )
+    return  np.sqrt( avg2 - avg**2 )
 
 
 def angulars(edges, center, shape):
