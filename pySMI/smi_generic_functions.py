@@ -2317,45 +2317,119 @@ def RemoveHot( img,threshold= 1E7, plot_=True ):
     return mask
 
 
+def show_label_array(ax, label_array, cmap=None, aspect=None,interpolation='nearest',**kwargs):
+    """
+    YG. Sep 2020, Copied from pyCHX
+    
+    Modified show_label_array(ax, label_array, cmap=None, **kwargs)
+        from https://github.com/Nikea/xray-vision/blob/master/xray_vision/mpl_plotting/roi.py
+    Display a labeled array nicely
+    Additional kwargs are passed through to `ax.imshow`.
+    If `vmin` is in kwargs, it is clipped to minimum of 0.5.
+    Parameters
+    ----------
+    ax : Axes
+        The `Axes` object to add the artist too
+    label_array: ndarray
+        Expected to be an unsigned integer array.  0 is background,
+        positive integers label region of interest
+    cmap : str or colormap, optional
+        Color map to use, defaults to 'Paired'
+    Returns
+    -------
+    img : AxesImage
+        The artist added to the axes
+    """
+    if cmap is None:
+        cmap = 'viridis'
+    _cmap = copy.copy((mcm.get_cmap(cmap)))
+    _cmap.set_under('w', 0)
+    vmin = max(.5, kwargs.pop('vmin', .5))
+    im = ax.imshow(label_array, cmap=cmap,interpolation=interpolation,vmin=vmin, **kwargs)    
+    if aspect is None:
+        ax.set_aspect(aspect='auto')
+    return im
+
+
+def show_label_array_on_image(ax, image, label_array, cmap=None,norm=None, log_img=True,alpha=0.3, vmin=0.1, vmax=5,
+                              imshow_cmap='gray', **kwargs):  #norm=LogNorm(), 
+    """
+    This will plot the required ROI's(labeled array) on the image
+    
+    Additional kwargs are passed through to `ax.imshow`.
+    If `vmin` is in kwargs, it is clipped to minimum of 0.5.
+    Parameters
+    ----------
+    ax : Axes
+        The `Axes` object to add the artist too
+    image : array
+        The image array
+    label_array : array
+        Expected to be an unsigned integer array.  0 is background,
+        positive integers label region of interest
+    cmap : str or colormap, optional
+        Color map to use for plotting the label_array, defaults to 'None'
+    imshow_cmap : str or colormap, optional
+        Color map to use for plotting the image, defaults to 'gray'
+    norm : str, optional
+        Normalize scale data, defaults to 'Lognorm()'
+    Returns
+    -------
+    im : AxesImage
+        The artist added to the axes
+    im_label : AxesImage
+        The artist added to the axes
+    """
+    ax.set_aspect('equal')
+    if log_img:
+        im = ax.imshow(image, cmap=imshow_cmap, interpolation='none',norm=LogNorm(vmin,  vmax),**kwargs) 
+    else:
+        im = ax.imshow(image, cmap=imshow_cmap, interpolation='none',vmin=vmin, vmax=vmax,**kwargs)
+    im_label = mpl_plot.show_label_array(ax, label_array, cmap=cmap, vmin=vmin, vmax=vmax, alpha=alpha,**kwargs)  
+    return im, im_label   
+
+
 ############
 ###plot data
-
-def show_img( image, ax=None,label_array=None, alpha=0.5, interpolation='nearest',
-             xlim=None, ylim=None, save=False,image_name=None,path=None, 
-             aspect=None, logs=False,vmin=None,vmax=None,return_fig=False,cmap='viridis', 
-             show_time= False, file_name =None, ylabel=None, xlabel=None, extent=None,
-             show_colorbar=True, tight=True, show_ticks=True, save_format = 'png', dpi= None,
-             center=None, center_size=None,origin='lower', lab_fontsize = 16,  tick_size = 12, colorbar_fontsize = 8, 
+def show_img( image, ax=None,label_array=None, alpha=0.5,interpolation='nearest',xlim=None,ylim=None,
+             save=False,image_name=None,path=None,aspect=None,logs=False,vmin=None,vmax=None,return_fig=False,
+             cmap='viridis', show_time= False, file_name =None, ylabel=None, xlabel=None, extent=None,
+             show_colorbar=False, tight=True, show_ticks=True, save_format = 'png', dpi= None,center=None,
+             origin='lower', lab_fontsize = 16, tick_size = 12, colorbar_fontsize = 8, use_mat_imshow=True,
              *argv,**kwargs ):    
     """YG. Sep26, 2017 Add label_array/alpha option to show a mask on top of image
     
-    a simple function to show image by using matplotlib.plt imshow
+    A wrap function of plt.imshow to show image  
     pass *argv,**kwargs to imshow
     
     Parameters
     ----------
-    image : array
-        Image to show
+    image : array,  Image to show
+    ax: if not None, ax should be [fig, ax]
     Returns
     -------
     None
     """ 
     if ax is None:
-        if RUN_GUI:
-            fig = Figure()
-            ax = fig.add_subplot(111)
-        else:
-            fig, ax = plt.subplots()
+        fig, ax = plt.subplots()
     else:
         fig, ax=ax      
-    if center is not None:        
-        plot1D(center[1],center[0],markersize=center_size,ax=ax, c='b', m='o', legend='')
+    if center is not None:
+        plot1D(center[1],center[0],ax=ax, c='b', m='o', legend='')
     if not logs:
-        im=imshow(ax, image, origin=origin,cmap=cmap,interpolation=interpolation, vmin=vmin,vmax=vmax,
-                    extent=extent)  #vmin=0,vmax=1,
+        if not use_mat_imshow:
+            im=imshow(ax, image, origin=origin,cmap=cmap,interpolation=interpolation, vmin=vmin,vmax=vmax,
+                    extent=extent)  
+        else:
+            im=ax.imshow(  image, origin=origin,cmap=cmap,interpolation=interpolation, vmin=vmin,vmax=vmax,
+                    extent=extent)           
     else:
-        im=imshow(ax, image, origin=origin,cmap=cmap,
+        if not use_mat_imshow:
+            im=imshow(ax, image, origin=origin,cmap=cmap,
                 interpolation=interpolation, norm=LogNorm(vmin,  vmax),extent=extent)   
+        else:
+            im=ax.imshow(image, origin=origin,cmap=cmap,
+                interpolation=interpolation, norm=LogNorm(vmin,  vmax),extent=extent)             
     if label_array is not None:
         im2=show_label_array(ax, label_array, alpha= alpha, cmap=cmap, interpolation=interpolation )  
         
@@ -2363,38 +2437,25 @@ def show_img( image, ax=None,label_array=None, alpha=0.5, interpolation='nearest
     if xlim is not None:
         ax.set_xlim(   xlim  )        
     if ylim is not None:
-        ax.set_ylim(   ylim )
-    
+        ax.set_ylim(   ylim )    
     if not show_ticks:
         ax.set_yticks([])
         ax.set_xticks([])        
-    else:   
-        
+    else:           
         ax.tick_params(axis='both', which='major', labelsize=tick_size )
-        ax.tick_params(axis='both', which='minor', labelsize=tick_size )
-        #mpl.rcParams['xtick.labelsize'] = tick_size 
-        #mpl.rcParams['ytick.labelsize'] = tick_size
-        #print(tick_size)
-    
+        ax.tick_params(axis='both', which='minor', labelsize=tick_size )    
     if ylabel is not None:
-        #ax.set_ylabel(ylabel)#, fontsize = 9)
         ax.set_ylabel(  ylabel , fontsize = lab_fontsize    )
     if xlabel is not None:
-        ax.set_xlabel(xlabel , fontsize = lab_fontsize )          
-        
+        ax.set_xlabel(xlabel , fontsize = lab_fontsize ) 
     if aspect is not None:
-        #aspect = image.shape[1]/float( image.shape[0] )
         ax.set_aspect(aspect)
     else:
-        ax.set_aspect(aspect='auto')
-        
+        ax.set_aspect(aspect='auto')        
     if show_colorbar:
-        try:
-            cbar = fig.colorbar(im, extend='neither', spacing='proportional',
+        cbar = fig.colorbar(im, extend='neither', spacing='proportional',
                 orientation='vertical' )
-            cbar.ax.tick_params(labelsize=colorbar_fontsize)        
-        except:
-            pass
+        cbar.ax.tick_params(labelsize=colorbar_fontsize)        
     fig.set_tight_layout(tight) 
     if save:
         if show_time:
@@ -2405,11 +2466,11 @@ def show_img( image, ax=None,label_array=None, alpha=0.5, interpolation='nearest
             fp = path + '%s'%( image_name ) + '.' + save_format
         if dpi is None:
             dpi = fig.dpi
-        plt.savefig( fp, dpi= dpi)          
-    #fig.set_tight_layout(tight)     
+        plt.savefig( fp, dpi= dpi) 
     if return_fig:
-        return im #fig
+        return im #fig 
     
+ 
 
     
     
