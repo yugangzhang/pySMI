@@ -500,11 +500,10 @@ class Calibration(object):
 class CalibrationGonio(Calibration):
     """
     Initially developed by Kevin. Yager
-    Add sample rotation angles by Yugang Zhang
+    Add offest and incident angles by Yugang Zhang
     
     The geometric claculations used here are described:
-    http://gisaxs.com/index.php/Geometry:WAXS_3D
-    
+    http://gisaxs.com/index.php/Geometry:WAXS_3D    
     
     
     """    
@@ -512,7 +511,7 @@ class CalibrationGonio(Calibration):
     # Experimental parameters
     ########################################
     
-    def set_angles(self, det_phi_g=0., det_theta_g=0., 
+    def set_angles(self, det_phi_g=0., det_theta_g=0., incident_angle=0,
                    sam_phi=0, sam_chi=0, sam_theta=0,
                    offset_x = 0, offset_y =0, offset_z=0):
         '''
@@ -540,7 +539,8 @@ class CalibrationGonio(Calibration):
         self.offset_x = offset_x
         self.offset_y = offset_y
         self.offset_z = offset_z
-        self.sam_phi=sam_phi   #incident angle       
+        self.incident_angle  = incident_angle
+        self.sam_phi=sam_phi   
         self.sam_chi= sam_chi
         self.sam_theta=sam_theta
         
@@ -695,6 +695,9 @@ class CalibrationGonio(Calibration):
         http://gisaxs.com/index.php/Geometry:WAXS_3D
         
         YG add offset corrections at Sep 21, 2017
+        
+        incident beam is along y-direction
+        
         """    
         
         #print('Here to get qmap with offset.')
@@ -721,30 +724,34 @@ class CalibrationGonio(Calibration):
                            2*offset_x*(   X_c*np.cos(phi_g) - np.sin(phi_g) * yprime ) +
                            2*offset_y*(   X_c*np.sin(phi_g) + np.cos(phi_g) * yprime ) +
                            2*offset_z*(    dprime*np.sin(theta_g) + Y_c*np.cos(theta_g) )
-                        )                      
-                        
-        k_over_Dprime = self.get_k()/Dprime          
-        
+                        )
+        k_over_Dprime = self.get_k()/Dprime   
         qx_c = k_over_Dprime*( X_c*np.cos(phi_g) - np.sin(phi_g) * yprime +  offset_x) 
         qy_c = k_over_Dprime*( X_c*np.sin(phi_g) + np.cos(phi_g) * yprime +  offset_y - Dprime) 
         qz_c = -1*k_over_Dprime*( dprime*np.sin(theta_g) + Y_c*np.cos(theta_g) +  offset_z )
-
-        qr_c = np.sqrt(np.square(qx_c) + np.square(qy_c)) 
-        q_c = np.sqrt(np.square(qx_c) + np.square(qy_c) + np.square(qz_c))  
         
-        self.qx_map_data = qx_c
-        self.qy_map_data = qy_c
-        self.qz_map_data = qz_c
-        self.q_map_data = q_c
-        self.qr_map_data = qr_c
-        
-        # convert to sample coordinates
-        alpha = np.radians(self.sam_phi)
-        Qn = -qz_c * np.cos(alpha) + qy_c * np.sin(alpha)
-        Qr = np.sqrt(q_c*q_c-Qn*Qn)*np.sign(qx_c)        
-        self.qr_map_data = Qr
+        # convert to sample coordinates        
+        if self.incident_angle == 0:
+            self.qx_map_data = qx_c
+            self.qy_map_data = qy_c
+            self.qz_map_data = qz_c  
+        else:
+            ai = np.radians( self.incident_angle )
+            self.qx_map_data = qx_c 
+            self.qy_map_data =  qy_c * np.cos( ai ) + qz_c * np.sin( ai )
+            self.qz_map_data =  -qy_c * np.sin( ai ) + qz_c * np.cos( ai )
+        M = (self.qx_map_data ==0 )
+        sign = np.sign( self.qx_map_data  )
+        sign[M] = 1    
+        self.qr_map_data =  ( np.sqrt(np.square(self.qx_map_data) + np.square(self.qy_map_data))  ) * sign     
+        self.q_map_data =  np.sqrt(  np.square(self.qx_map_data) + np.square(self.qy_map_data) + np.square(self.qz_map_data)      )
+            
+        #alpha = np.radians(self.sam_phi)
+        #Qn = -qz_c * np.cos(alpha) + qy_c * np.sin(alpha)
+        #Qr = np.sqrt(q_c*q_c-Qn*Qn)*np.sign(qx_c)        
+        #self.qr_map_data = Qr
         #self.qn_map_data = Qn 
-        self.qz_map_data = Qn 
+        #self.qz_map_data = Qn 
         #print('here')
         
         
